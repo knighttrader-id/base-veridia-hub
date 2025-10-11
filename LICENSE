@@ -1,14 +1,49 @@
-VeridiaHub Proprietary License
+# VeridiaHub - Educational & Research License
 
-Copyright (c) 2025 Daniel Sukamto
+## Copyright Notice
+Copyright (c) 2025 Daniel Sukamto. All rights reserved.
 
-TERMS:
-1. This software is provided for educational and research purposes only
-2. Commercial use is strictly prohibited without written permission
-3. No redistribution, modification, or derivative works allowed
-4. Source code remains proprietary and confidential
-5. All intellectual property rights reserved
+## Project Purpose
+This project is developed by Daniel Sukamto for hackathon participation and startup development purposes. It demonstrates a complete Web3 copyright verification and multi-token payment platform built on Base Layer-2 blockchain, showcasing advanced smart contract architecture and frontend integration.
 
-Contact: veridia.hub@gmail.com for licensing inquiries
+## License Terms
 
-All rights reserved by the VeridiaHub development team.
+### Permitted Uses
+- **Educational Study**: Students and developers may study the codebase to learn Web3 development patterns
+- **Research & Analysis**: Technical analysis of smart contract architecture and multi-token payment systems
+- **Personal Learning**: Individual study of advanced Web3 development techniques
+- **Code Review**: Submit bug reports, security suggestions, and technical improvements
+
+**Required Attribution**: Any permitted use must include clear acknowledgment: "Based on VeridiaHub by Daniel Sukamto (veridia.hub@gmail.com)"
+
+### Prohibited Uses
+- **Commercial Use**: Any commercial deployment, monetization, or business application
+- **Hackathon Use**: Use in hackathons, coding competitions, or similar events
+- **Production Deployment**: Live deployment for commercial services or products
+- **Redistribution**: Distribution of modified or unmodified copies for commercial purposes
+- **Competitive Use**: Use in competing products or services
+- **Unauthorized Modification**: Creating derivative works without explicit permission
+- **Public Demonstrations**: Use in public presentations, demos, or showcases without permission
+
+### Intellectual Property
+- All source code, documentation, and related materials remain proprietary
+- Trademarks, logos, and branding are protected intellectual property
+- Patent rights are reserved where applicable
+- No transfer of ownership or rights is granted
+
+### Disclaimer
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Contact Information
+For licensing inquiries, commercial use requests, or collaboration opportunities:
+- **Email**: veridia.hub@gmail.com
+- **Project**: VeridiaHub - Web3 Copyright Platform
+- **Blockchain**: Base Layer-2 (Ethereum L2)
+
+## Development Team
+- **Daniel Sukamto**: Founder & Smart Contract Architect
+- **Andrew Antonio**: Full Stack & Blockchain Engineer  
+- **Vermount William**: Front End & QA Engineer
+
+---
+*This license protects Daniel Sukamto's intellectual property and prohibits hackathon/commercial use by others. All permitted uses require proper attribution. For licensing inquiries, please contact veridia.hub@gmail.com.*

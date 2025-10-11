@@ -9,7 +9,7 @@ describe("VeridiaHub Integration Tests", function () {
   const ARTWORK_DESC = "A stunning digital artwork";
   const ARTWORK_URI = "ipfs://QmMasterpiece123";
 
-  const LICENSE_PRICE = ethers.parseEther("1.0");
+  const LICENSE_PRICE = ethers.parseUnits("100", 6); // 100 USDC (6 decimals)
   const ROYALTY_PERCENT = 500; // 5%
   const EXPIRATION_TIME = 0; // Perpetual license for testing
   const LICENSE_TERMS = "ipfs://QmLicenseTerms456";
@@ -20,25 +20,69 @@ describe("VeridiaHub Integration Tests", function () {
   async function deployFullSystemFixture() {
     const [owner, creator, licensee, collector, hacker] = await ethers.getSigners();
 
-    // Deploy all contracts
+    // Deploy existing contracts
     const Artwork = await ethers.getContractFactory("Artwork");
     const artwork = await Artwork.deploy();
 
     const License = await ethers.getContractFactory("License");
     const license = await License.deploy(await artwork.getAddress(), "https://api.veridiahub.com/license/");
 
+    // Deploy PaymentTokenManager
+    const PaymentTokenManager = await ethers.getContractFactory("PaymentTokenManager");
+    const paymentTokenManager = await PaymentTokenManager.deploy();
+
+    // Deploy Mock ERC20 tokens
+    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const usdc = await MockUSDC.deploy();
+
+    const MockUSDT = await ethers.getContractFactory("MockUSDT");
+    const usdt = await MockUSDT.deploy();
+
+    const MockDAI = await ethers.getContractFactory("MockDAI");
+    const dai = await MockDAI.deploy();
+
+    const MockIDRX = await ethers.getContractFactory("MockIDRX");
+    const idrx = await MockIDRX.deploy();
+
+    // Add tokens to PaymentTokenManager
+    await paymentTokenManager.addToken(await usdc.getAddress(), "USDC", 6);
+    await paymentTokenManager.addToken(await usdt.getAddress(), "USDT", 6);
+    await paymentTokenManager.addToken(await dai.getAddress(), "DAI", 18);
+    await paymentTokenManager.addToken(await idrx.getAddress(), "IDRX", 6);
+
+    // Deploy Marketplace with PaymentTokenManager
     const Marketplace = await ethers.getContractFactory("Marketplace");
     const marketplace = await Marketplace.deploy(
       await artwork.getAddress(),
       await license.getAddress(),
       PLATFORM_WALLET,
-      NATIONAL_FUND
+      NATIONAL_FUND,
+      await paymentTokenManager.getAddress()
     );
+
+    // Distribute tokens to test accounts
+    const INITIAL_BALANCE = ethers.parseUnits("10000", 6); // 10,000 tokens (6 decimals)
+    const INITIAL_DAI = ethers.parseEther("10000"); // 10,000 DAI (18 decimals)
+    
+    await usdc["mint(address,uint256)"](licensee.address, INITIAL_BALANCE);
+    await usdt["mint(address,uint256)"](licensee.address, INITIAL_BALANCE);
+    await dai["mint(address,uint256)"](licensee.address, INITIAL_DAI);
+    await idrx["mint(address,uint256)"](licensee.address, INITIAL_BALANCE);
+
+    // Also mint tokens to collector for additional testing
+    await usdc["mint(address,uint256)"](collector.address, INITIAL_BALANCE);
+    await usdt["mint(address,uint256)"](collector.address, INITIAL_BALANCE);
+    await dai["mint(address,uint256)"](collector.address, INITIAL_DAI);
+    await idrx["mint(address,uint256)"](collector.address, INITIAL_BALANCE);
 
     // Set up marketplace approval
     await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
 
-    return { artwork, license, marketplace, owner, creator, licensee, collector, hacker };
+    return { 
+      artwork, license, marketplace, paymentTokenManager,
+      usdc, usdt, dai, idrx,
+      owner, creator, licensee, collector, hacker 
+    };
   }
 
   describe("Complete Copyright Registration to Monetization Flow", function () {
@@ -405,6 +449,595 @@ describe("VeridiaHub Integration Tests", function () {
 
       // Batch should be significantly more efficient
       expect(avgBatchGas).to.be.lt(avgIndividualGas);
+    });
+  });
+
+  describe("Multi-Token Payment Integration", function () {
+    it("Should complete purchase flow with USDC", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const licenseId = 1;
+      const amount = 1;
+      const price = await license.licensePrice(licenseId);
+      
+      // Debug: Check balances and price
+      const licenseeUSDCBalance = await usdc.balanceOf(licensee.address);
+      console.log("Licensee USDC balance:", ethers.formatUnits(licenseeUSDCBalance, 6));
+      console.log("License price:", ethers.formatEther(price));
+      console.log("Total price:", ethers.formatEther(price * BigInt(amount)));
+      console.log("License ID:", licenseId);
+      
+      // Approve USDC spending
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Purchase with USDC
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(licenseId, amount, await usdc.getAddress()))
+        .to.emit(marketplace, "LicensePurchased")
+        .withArgs(licenseId, licensee.address, price, amount, await usdc.getAddress());
+      
+      // Verify license ownership
+      expect(await license.balanceOf(licensee.address, licenseId)).to.equal(amount);
+      
+      // Verify USDC balances updated correctly
+      const creatorBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const platformBalance = await marketplace.platformTokenBalances(await usdc.getAddress());
+      const nationalBalance = await marketplace.nationalTokenBalances(await usdc.getAddress());
+      
+      expect(creatorBalance).to.be.gt(0);
+      expect(platformBalance).to.be.gt(0);
+      expect(nationalBalance).to.be.gt(0);
+    });
+
+    it("Should complete purchase flow with USDT", async function () {
+      const { artwork, license, marketplace, usdt, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const licenseId = 1;
+      const amount = 1;
+      const price = await license.licensePrice(licenseId);
+      
+      // Approve USDT spending
+      await usdt.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Purchase with USDT
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(licenseId, amount, await usdt.getAddress()))
+        .to.emit(marketplace, "LicensePurchased")
+        .withArgs(licenseId, licensee.address, price, amount, await usdt.getAddress());
+      
+      // Verify license ownership
+      expect(await license.balanceOf(licensee.address, licenseId)).to.equal(amount);
+    });
+
+    it("Should complete purchase flow with DAI", async function () {
+      const { artwork, license, marketplace, dai, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const licenseId = 1;
+      const amount = 1;
+      const price = await license.licensePrice(licenseId);
+      
+      // Approve DAI spending
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Purchase with DAI
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(licenseId, amount, await dai.getAddress()))
+        .to.emit(marketplace, "LicensePurchased")
+        .withArgs(licenseId, licensee.address, price, amount, await dai.getAddress());
+      
+      // Verify license ownership
+      expect(await license.balanceOf(licensee.address, licenseId)).to.equal(amount);
+    });
+
+    it("Should complete purchase flow with IDRX", async function () {
+      const { artwork, license, marketplace, idrx, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const licenseId = 1;
+      const amount = 1;
+      const price = await license.licensePrice(licenseId);
+      
+      // Approve IDRX spending
+      await idrx.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Purchase with IDRX
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(licenseId, amount, await idrx.getAddress()))
+        .to.emit(marketplace, "LicensePurchased")
+        .withArgs(licenseId, licensee.address, price, amount, await idrx.getAddress());
+      
+      // Verify license ownership
+      expect(await license.balanceOf(licensee.address, licenseId)).to.equal(amount);
+    });
+
+    it("Should handle multiple token purchases in sequence", async function () {
+      const { artwork, license, marketplace, usdc, dai, creator, licensee, collector } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create 3 licenses
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(3, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Purchase license 1 with USDC
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Purchase license 2 with DAI
+      await dai.connect(collector).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(collector).buyLicenseWithToken(2, 1, await dai.getAddress());
+      
+      // Purchase license 3 with ETH (legacy)
+      await marketplace.connect(licensee).buyLicense(3, 1, { value: price });
+      
+      // Verify all licenses transferred
+      expect(await license.balanceOf(licensee.address, 1)).to.equal(1);
+      expect(await license.balanceOf(collector.address, 2)).to.equal(1);
+      expect(await license.balanceOf(licensee.address, 3)).to.equal(1);
+      
+      // Verify balances are tracked separately
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const creatorDAIBalance = await marketplace.creatorTokenBalances(creator.address, await dai.getAddress());
+      const creatorETHBalance = await marketplace.creatorBalances(creator.address);
+      
+      expect(creatorUSDCBalance).to.be.gt(0);
+      expect(creatorDAIBalance).to.be.gt(0);
+      expect(creatorETHBalance).to.be.gt(0);
+    });
+
+    it("Should correctly distribute fees across different tokens", async function () {
+      const { artwork, license, marketplace, usdc, dai, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Purchase with USDC
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Purchase with DAI (create new license with different price)
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE * BigInt(2), ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE * BigInt(2));
+      const price2 = await license.licensePrice(2);
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price2);
+      await marketplace.connect(licensee).buyLicenseWithToken(2, 1, await dai.getAddress());
+      
+      // Verify separate balance tracking
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const creatorDAIBalance = await marketplace.creatorTokenBalances(creator.address, await dai.getAddress());
+      const platformUSDCBalance = await marketplace.platformTokenBalances(await usdc.getAddress());
+      const platformDAIBalance = await marketplace.platformTokenBalances(await dai.getAddress());
+      
+      expect(creatorUSDCBalance).to.be.gt(0);
+      expect(creatorDAIBalance).to.be.gt(0);
+      expect(platformUSDCBalance).to.be.gt(0);
+      expect(platformDAIBalance).to.be.gt(0);
+      
+      // Balances should be independent
+      expect(creatorUSDCBalance).to.not.equal(creatorDAIBalance);
+    });
+  });
+
+  describe("Multi-Token Batch Purchases", function () {
+    it("Should handle batch purchase with USDT", async function () {
+      const { artwork, license, marketplace, usdt, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create 3 licenses
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(3, 50, LICENSE_PRICE);
+      
+      const licenseIds = [1, 2, 3];
+      const amounts = [1, 1, 1];
+      const totalPrice = LICENSE_PRICE * BigInt(3);
+      
+      // Approve total USDT amount
+      await usdt.connect(licensee).approve(await marketplace.getAddress(), totalPrice);
+      
+      // Batch purchase with USDT
+      await expect(marketplace.connect(licensee).batchBuyLicenseWithToken(licenseIds, amounts, await usdt.getAddress()))
+        .to.emit(marketplace, "BatchPurchaseCompleted")
+        .withArgs(licensee.address, licenseIds, amounts, totalPrice, await usdt.getAddress());
+      
+      // Verify all licenses transferred
+      expect(await license.balanceOf(licensee.address, 1)).to.equal(1);
+      expect(await license.balanceOf(licensee.address, 2)).to.equal(1);
+      expect(await license.balanceOf(licensee.address, 3)).to.equal(1);
+    });
+
+    it("Should handle batch purchase with mixed denominations", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create licenses with different prices
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE * BigInt(2), ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE * BigInt(3), ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE * BigInt(2));
+      await marketplace.connect(creator).listLicense(3, 50, LICENSE_PRICE * BigInt(3));
+      
+      const licenseIds = [1, 2, 3];
+      const amounts = [1, 1, 1];
+      const price1 = await license.licensePrice(1);
+      const price2 = await license.licensePrice(2);
+      const price3 = await license.licensePrice(3);
+      const totalPrice = price1 + price2 + price3;
+      
+      // Approve total USDC amount
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), totalPrice);
+      
+      // Batch purchase with USDC
+      await marketplace.connect(licensee).batchBuyLicenseWithToken(licenseIds, amounts, await usdc.getAddress());
+      
+      // Verify all licenses transferred
+      expect(await license.balanceOf(licensee.address, 1)).to.equal(1);
+      expect(await license.balanceOf(licensee.address, 2)).to.equal(1);
+      expect(await license.balanceOf(licensee.address, 3)).to.equal(1);
+      
+      // Verify fee distribution is correct
+      const creatorBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      expect(creatorBalance).to.be.gt(0);
+    });
+  });
+
+  describe("Multi-Token Withdrawals", function () {
+    it("Should allow creator to withdraw earnings in USDC", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Purchase with USDC
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Get creator's USDC balance before withdrawal
+      const creatorBalanceBefore = await usdc.balanceOf(creator.address);
+      const creatorEarnings = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      
+      // Creator withdraws USDC earnings
+      await marketplace.connect(creator)["withdrawEarnings(address)"](await usdc.getAddress());
+      
+      // Verify USDC balance increased
+      const creatorBalanceAfter = await usdc.balanceOf(creator.address);
+      expect(creatorBalanceAfter).to.equal(creatorBalanceBefore + creatorEarnings);
+      
+      // Verify contract balance decreased
+      const contractBalance = await usdc.balanceOf(await marketplace.getAddress());
+      expect(contractBalance).to.be.lt(creatorEarnings);
+    });
+
+    it("Should allow platform to withdraw fees in multiple tokens", async function () {
+      const { artwork, license, marketplace, usdc, usdt, dai, creator, licensee, collector } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create licenses
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(3, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Purchase with different tokens
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      await usdt.connect(collector).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(collector).buyLicenseWithToken(2, 1, await usdt.getAddress());
+      
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(3, 1, await dai.getAddress());
+      
+      // Platform withdraws each token separately
+      const platformUSDCBefore = await usdc.balanceOf(PLATFORM_WALLET);
+      const platformUSDTBefore = await usdt.balanceOf(PLATFORM_WALLET);
+      const platformDAIBefore = await dai.balanceOf(PLATFORM_WALLET);
+      
+      await marketplace["withdrawPlatform(address)"](await usdc.getAddress());
+      await marketplace["withdrawPlatform(address)"](await usdt.getAddress());
+      await marketplace["withdrawPlatform(address)"](await dai.getAddress());
+      
+      // Verify all balances increased
+      const platformUSDCAfter = await usdc.balanceOf(PLATFORM_WALLET);
+      const platformUSDTAfter = await usdt.balanceOf(PLATFORM_WALLET);
+      const platformDAIAfter = await dai.balanceOf(PLATFORM_WALLET);
+      
+      expect(platformUSDCAfter).to.be.gt(platformUSDCBefore);
+      expect(platformUSDTAfter).to.be.gt(platformUSDTBefore);
+      expect(platformDAIAfter).to.be.gt(platformDAIBefore);
+    });
+
+    it("Should track balances separately for each token", async function () {
+      const { artwork, license, marketplace, usdc, dai, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create licenses with different prices
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE * BigInt(2), ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE * BigInt(2));
+      
+      const price1 = await license.licensePrice(1);
+      const price2 = await license.licensePrice(2);
+      
+      // Purchase with USDC
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price1);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Purchase with DAI
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price2);
+      await marketplace.connect(licensee).buyLicenseWithToken(2, 1, await dai.getAddress());
+      
+      // Verify separate balance tracking
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const creatorDAIBalance = await marketplace.creatorTokenBalances(creator.address, await dai.getAddress());
+      const platformUSDCBalance = await marketplace.platformTokenBalances(await usdc.getAddress());
+      const platformDAIBalance = await marketplace.platformTokenBalances(await dai.getAddress());
+      const nationalUSDCBalance = await marketplace.nationalTokenBalances(await usdc.getAddress());
+      const nationalDAIBalance = await marketplace.nationalTokenBalances(await dai.getAddress());
+      
+      expect(creatorUSDCBalance).to.be.gt(0);
+      expect(creatorDAIBalance).to.be.gt(0);
+      expect(platformUSDCBalance).to.be.gt(0);
+      expect(platformDAIBalance).to.be.gt(0);
+      expect(nationalUSDCBalance).to.be.gt(0);
+      expect(nationalDAIBalance).to.be.gt(0);
+      
+      // Balances should be independent
+      expect(creatorUSDCBalance).to.not.equal(creatorDAIBalance);
+    });
+  });
+
+  describe("Multi-Token Error Scenarios", function () {
+    it("Should reject purchase with unsupported token", async function () {
+      const { artwork, license, marketplace, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      // Deploy a token not in PaymentTokenManager
+      const MockToken = await ethers.getContractFactory("MockERC20");
+      const unsupportedToken = await MockToken.deploy("Unsupported Token", "UNSUP", 18, ethers.parseEther("1000"));
+      
+      const price = await license.licensePrice(1);
+      await unsupportedToken.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Attempt purchase - should revert
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(1, 1, await unsupportedToken.getAddress()))
+        .to.be.revertedWith("Token not supported");
+    });
+
+    it("Should reject purchase with insufficient token balance", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Approve USDC but have insufficient balance (approve more than we have)
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price);
+      
+      // Transfer away most of the balance to simulate insufficient balance
+      const balance = await usdc.balanceOf(licensee.address);
+      await usdc.connect(licensee).transfer(creator.address, balance - BigInt(1));
+      
+      // Should revert with appropriate error
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress()))
+        .to.be.revertedWith("Insufficient token balance");
+    });
+
+    it("Should reject purchase with insufficient allowance", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(1);
+      
+      // Have USDC balance but insufficient approval
+      const insufficientAllowance = price / BigInt(2);
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), insufficientAllowance);
+      
+      // Should revert
+      await expect(marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress()))
+        .to.be.revertedWith("Insufficient token allowance");
+    });
+
+    it("Should handle token decimal differences correctly", async function () {
+      const { artwork, license, marketplace, usdc, dai, creator, licensee } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create licenses with different prices
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE * BigInt(2), ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List all licenses on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      await marketplace.connect(creator).listLicense(2, 50, LICENSE_PRICE * BigInt(2));
+      
+      const price1 = await license.licensePrice(1);
+      const price2 = await license.licensePrice(2);
+      
+      // Purchase with 6-decimal USDC
+      await usdc.connect(licensee).approve(await marketplace.getAddress(), price1);
+      await marketplace.connect(licensee).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Purchase with 18-decimal DAI
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price2);
+      await marketplace.connect(licensee).buyLicenseWithToken(2, 1, await dai.getAddress());
+      
+      // Verify calculations are correct for both
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const creatorDAIBalance = await marketplace.creatorTokenBalances(creator.address, await dai.getAddress());
+      
+      expect(creatorUSDCBalance).to.be.gt(0);
+      expect(creatorDAIBalance).to.be.gt(0);
+      
+      // Both should have similar value but different decimal representations
+      expect(creatorUSDCBalance).to.not.equal(creatorDAIBalance);
+    });
+  });
+
+  describe("Cross-Token Integration Scenarios", function () {
+    it("Should handle creator creating multiple licenses and receiving payments in different tokens", async function () {
+      const { artwork, license, marketplace, usdc, dai, creator, licensee, collector } = await loadFixture(deployFullSystemFixture);
+      
+      // Creator creates 3 licenses
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      const price = await license.licensePrice(0);
+      
+      // License 1 purchased with ETH
+      await marketplace.connect(licensee).buyLicense(0, 1, { value: price });
+      
+      // License 2 purchased with USDC
+      await usdc.connect(collector).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(collector).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // License 3 purchased with DAI
+      await dai.connect(licensee).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(licensee).buyLicenseWithToken(2, 1, await dai.getAddress());
+      
+      // Verify creator can withdraw each token separately
+      const creatorETHBalance = await marketplace.creatorBalances(creator.address);
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      const creatorDAIBalance = await marketplace.creatorTokenBalances(creator.address, await dai.getAddress());
+      
+      expect(creatorETHBalance).to.be.gt(0);
+      expect(creatorUSDCBalance).to.be.gt(0);
+      expect(creatorDAIBalance).to.be.gt(0);
+      
+      // Creator withdraws each token
+      await marketplace.connect(creator).withdrawEarnings();
+      await marketplace.connect(creator).withdrawEarnings(await usdc.getAddress());
+      await marketplace.connect(creator).withdrawEarnings(await dai.getAddress());
+      
+      // Verify balances are cleared
+      expect(await marketplace.creatorBalances(creator.address)).to.equal(0);
+      expect(await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress())).to.equal(0);
+      expect(await marketplace.creatorTokenBalances(creator.address, await dai.getAddress())).to.equal(0);
+    });
+
+    it("Should correctly calculate royalties when same license purchased with different tokens", async function () {
+      const { artwork, license, marketplace, usdc, creator, licensee, collector } = await loadFixture(deployFullSystemFixture);
+      
+      // Setup: mint artwork and create license
+      await artwork.connect(creator).mintArtwork(ARTWORK_HASH, ARTWORK_TITLE, ARTWORK_DESC, ARTWORK_URI);
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await license.connect(creator).setApprovalForAll(await marketplace.getAddress(), true);
+      
+      // List license on marketplace
+      await marketplace.connect(creator).listLicense(1, 50, LICENSE_PRICE);
+      
+      const price = await license.licensePrice(0);
+      
+      // Initial purchase with ETH
+      await marketplace.connect(licensee).buyLicense(0, 1, { value: price });
+      
+      // Resale with USDC payment (simulate by creating new license)
+      await license.connect(creator).mintLicense(ARTWORK_HASH, 100, LICENSE_PRICE, ROYALTY_PERCENT, EXPIRATION_TIME, LICENSE_TERMS);
+      await usdc.connect(collector).approve(await marketplace.getAddress(), price);
+      await marketplace.connect(collector).buyLicenseWithToken(1, 1, await usdc.getAddress());
+      
+      // Verify royalty distribution works for both tokens
+      const creatorETHBalance = await marketplace.creatorBalances(creator.address);
+      const creatorUSDCBalance = await marketplace.creatorTokenBalances(creator.address, await usdc.getAddress());
+      
+      expect(creatorETHBalance).to.be.gt(0);
+      expect(creatorUSDCBalance).to.be.gt(0);
+      
+      // Both should have similar proportional values
+      expect(creatorETHBalance).to.be.closeTo(creatorUSDCBalance, creatorUSDCBalance / BigInt(1000)); // Allow 0.1% difference
     });
   });
 });

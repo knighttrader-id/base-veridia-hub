@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Filter, Eye, ShoppingCart, User, Star, Loader, Zap, TrendingUp, Users, Clock, Sparkles, Heart, Share2 } from 'lucide-react';
+import { Search, Filter, Eye, ShoppingCart, User, Star, Loader, Zap, TrendingUp, Users, Clock, Sparkles, Heart, Share2, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { getMarketplaceArtworks, MarketplaceArtwork } from '../services/artworkService';
 import { AnimatedBackground, FloatingElements } from '../components/AnimatedBackground';
 import { Web3Card, Web3Grid, Web3Hero } from '../components/Web3Card';
 import { Web3Navbar, FloatingActionButton } from '../components/Web3Navbar';
+import TokenSelector from '../components/TokenSelector';
+import ApprovalButton from '../components/ApprovalButton';
+import TokenPriceDisplay from '../components/TokenPriceDisplay';
+import TokenBalance from '../components/TokenBalance';
+import { useWallet } from '../contexts/WalletContext';
+import { TokenService } from '../services/tokenService';
+import { MarketplaceService } from '../services/onchainService';
+import { getNativeToken } from '../config/tokens';
 
 const categories = ['Semua', 'Desain', 'Musik', 'Film', 'Tulisan', 'Fotografi', 'NFT', '3D Art'];
 
@@ -16,10 +24,27 @@ export default function Web3Marketplace() {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'newest' | 'price' | 'popular'>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Multi-token purchase state
+  const [selectedToken, setSelectedToken] = useState(getNativeToken().address);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [selectedArtwork, setSelectedArtwork] = useState<MarketplaceArtwork | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+  const [userBalances, setUserBalances] = useState<{ [key: string]: string }>({});
+  
+  const { account } = useWallet();
 
   useEffect(() => {
     loadArtworks();
   }, [selectedCategory, sortBy]);
+
+  useEffect(() => {
+    if (account) {
+      loadUserBalances();
+    }
+  }, [account, selectedToken]);
 
   const loadArtworks = async () => {
     try {
@@ -32,6 +57,86 @@ export default function Web3Marketplace() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadUserBalances = async () => {
+    if (!account) return;
+    
+    try {
+      const balances: { [key: string]: string } = {};
+      const nativeToken = getNativeToken();
+      
+      // Load native token balance
+      const nativeBalance = await TokenService.getBalance(nativeToken.address, account);
+      balances[nativeToken.address] = nativeBalance;
+      
+      // Load other token balances
+      for (const token of ['USDC', 'USDT', 'DAI', 'IDRX']) {
+        try {
+          const tokenAddress = process.env[`REACT_APP_${token}_ADDRESS`] || '0x0000000000000000000000000000000000000000';
+          if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
+            const balance = await TokenService.getBalance(tokenAddress, account);
+            balances[tokenAddress] = balance;
+          }
+        } catch (err) {
+          console.warn(`Failed to load ${token} balance:`, err);
+          balances[token] = '0';
+        }
+      }
+      
+      setUserBalances(balances);
+    } catch (err) {
+      console.error('Error loading user balances:', err);
+    }
+  };
+
+  const handlePurchaseClick = (artwork: MarketplaceArtwork) => {
+    if (!account) {
+      alert('Please connect your wallet to purchase artworks');
+      return;
+    }
+    setSelectedArtwork(artwork);
+    setShowPurchaseModal(true);
+    setPurchaseError(null);
+    setPurchaseSuccess(false);
+  };
+
+  const handlePurchase = async () => {
+    if (!selectedArtwork || !account) return;
+    
+    setPurchaseLoading(true);
+    setPurchaseError(null);
+    
+    try {
+      const result = await MarketplaceService.buyLicense({
+        licenseId: selectedArtwork.tokenId,
+        amount: '1',
+        value: selectedArtwork.price,
+        paymentToken: selectedToken
+      });
+      
+      setPurchaseSuccess(true);
+      await loadUserBalances(); // Refresh balances
+      
+      // Close modal after success
+      setTimeout(() => {
+        setShowPurchaseModal(false);
+        setPurchaseSuccess(false);
+      }, 2000);
+      
+    } catch (err: any) {
+      console.error('Purchase error:', err);
+      setPurchaseError(err.message || 'Purchase failed');
+    } finally {
+      setPurchaseLoading(false);
+    }
+  };
+
+  const closePurchaseModal = () => {
+    setShowPurchaseModal(false);
+    setSelectedArtwork(null);
+    setPurchaseError(null);
+    setPurchaseSuccess(false);
   };
 
   const filteredArtworks = artworks.filter(artwork => {
@@ -215,7 +320,12 @@ export default function Web3Marketplace() {
                     tags={['Digital Art', 'NFT', 'Blockchain']}
                     isFeatured={Math.random() > 0.8}
                     isNew={Math.random() > 0.9}
-                    onClick={() => {}}
+                    onClick={() => handlePurchaseClick(artwork)}
+                    actionButton={{
+                      text: account ? 'Buy Now' : 'Connect Wallet',
+                      icon: <ShoppingCart className="w-4 h-4" />,
+                      onClick: () => handlePurchaseClick(artwork)
+                    }}
                   />
                 ))}
               </Web3Grid>
@@ -238,6 +348,147 @@ export default function Web3Marketplace() {
         icon={<Zap className="h-5 w-5" />}
         label="Create Artwork"
       />
+
+      {/* Purchase Modal */}
+      {showPurchaseModal && selectedArtwork && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800/90 backdrop-blur-xl border border-gray-600 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white">Purchase Artwork</h2>
+                <button
+                  onClick={closePurchaseModal}
+                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Artwork Preview */}
+                <div className="space-y-4">
+                  <div className="aspect-square bg-gray-700 rounded-xl overflow-hidden">
+                    <img
+                      src={selectedArtwork.tokenURI}
+                      alt={selectedArtwork.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">{selectedArtwork.title}</h3>
+                    <p className="text-gray-400">by {selectedArtwork.creator}</p>
+                    <p className="text-sm text-gray-300 mt-2">{selectedArtwork.description}</p>
+                  </div>
+                </div>
+
+                {/* Purchase Details */}
+                <div className="space-y-6">
+                  {/* Token Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Payment Method
+                    </label>
+                    <TokenSelector
+                      selectedTokenAddress={selectedToken}
+                      onSelectToken={setSelectedToken}
+                    />
+                  </div>
+
+                  {/* Price Display */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Price
+                    </label>
+                    <TokenPriceDisplay
+                      basePrice={selectedArtwork.price}
+                      selectedToken={selectedToken}
+                      size="lg"
+                      className="p-4 bg-gray-700/50 rounded-lg"
+                    />
+                  </div>
+
+                  {/* User Balance */}
+                  {account && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Your Balance
+                      </label>
+                      <TokenBalance
+                        amount={userBalances[selectedToken] || '0'}
+                        token={selectedToken}
+                        showIcon
+                        showSymbol
+                        className="p-3 bg-gray-700/50 rounded-lg"
+                      />
+                    </div>
+                  )}
+
+                  {/* Approval Button (for ERC20 tokens) */}
+                  {selectedToken !== getNativeToken().address && (
+                    <ApprovalButton
+                      tokenAddress={selectedToken}
+                      spenderAddress={process.env.REACT_APP_MARKETPLACE_ADDRESS || ''}
+                      requiredAmount={selectedArtwork.price}
+                      onApprovalComplete={() => {
+                        console.log('Token approved');
+                      }}
+                    />
+                  )}
+
+                  {/* Purchase Button */}
+                  <button
+                    onClick={handlePurchase}
+                    disabled={purchaseLoading || purchaseSuccess}
+                    className={`w-full py-4 px-6 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-2 ${
+                      purchaseSuccess
+                        ? 'bg-green-600 text-white'
+                        : purchaseLoading
+                        ? 'bg-blue-600 text-white opacity-50 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white hover:scale-105'
+                    }`}
+                  >
+                    {purchaseSuccess ? (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        <span>Purchase Successful!</span>
+                      </>
+                    ) : purchaseLoading ? (
+                      <>
+                        <Loader className="w-5 h-5 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="w-5 h-5" />
+                        <span>Complete Purchase</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Error Display */}
+                  {purchaseError && (
+                    <div className="flex items-center space-x-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-red-400" />
+                      <span className="text-red-400 text-sm">{purchaseError}</span>
+                    </div>
+                  )}
+
+                  {/* Success Message */}
+                  {purchaseSuccess && (
+                    <div className="flex items-center space-x-2 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                      <span className="text-green-400 text-sm">
+                        Artwork purchased successfully! Check your wallet.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,9 @@ import {
 import { AnimatedBackground, FloatingElements } from '../components/AnimatedBackground';
 import { Web3Navbar } from '../components/Web3Navbar';
 import { Web3Card } from '../components/Web3Card';
+import TokenPriceDisplay from '../components/TokenPriceDisplay';
+import TokenIcon from '../components/TokenIcon';
+import { getNativeToken } from '../config/tokens';
 
 interface RegistryItem {
   id: string;
@@ -48,6 +51,7 @@ export default function Web3IPRegistry() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [items, setItems] = useState<RegistryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [displayToken, setDisplayToken] = useState(getNativeToken().address);
 
   const types = [
     { value: 'all', label: 'All Types', icon: <Globe className="h-4 w-4" /> },
@@ -276,6 +280,22 @@ export default function Web3IPRegistry() {
                     <option value="views" className="bg-gray-800">Most Viewed</option>
                     <option value="price" className="bg-gray-800">Price</option>
                   </select>
+
+                  {/* Token Filter */}
+                  <div className="flex items-center gap-2 px-4 py-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl">
+                    <TokenIcon token={displayToken} size="sm" />
+                    <select
+                      value={displayToken}
+                      onChange={(e) => setDisplayToken(e.target.value)}
+                      className="bg-transparent text-white focus:outline-none"
+                    >
+                      <option value={getNativeToken().address} className="bg-gray-800">ETH</option>
+                      <option value="USDC" className="bg-gray-800">USDC</option>
+                      <option value="USDT" className="bg-gray-800">USDT</option>
+                      <option value="DAI" className="bg-gray-800">DAI</option>
+                      <option value="IDRX" className="bg-gray-800">IDRX</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -374,7 +394,11 @@ export default function Web3IPRegistry() {
                             </div>
                           </div>
                           <div className="text-white font-semibold">
-                            {item.price} ETH
+                            <TokenPriceDisplay
+                              basePrice={item.price}
+                              selectedToken={displayToken}
+                              size="sm"
+                            />
                           </div>
                         </div>
 
@@ -425,7 +449,13 @@ export default function Web3IPRegistry() {
                         
                         <div className="flex items-center gap-6">
                           <div className="text-right">
-                            <div className="text-white font-semibold">{item.price} ETH</div>
+                            <div className="text-white font-semibold">
+                              <TokenPriceDisplay
+                                basePrice={item.price}
+                                selectedToken={displayToken}
+                                size="sm"
+                              />
+                            </div>
                             <div className="text-sm text-gray-400">{item.views} views</div>
                           </div>
                           

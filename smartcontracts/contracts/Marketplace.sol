@@ -5,6 +5,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./PaymentTokenManager.sol";
 
 interface ILicense {
     function licensePrice(uint256 licenseId) external view returns (uint256);
@@ -37,8 +40,11 @@ interface IArtworkForMarket {
  * - Allows platform and national withdrawals
  */
 contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
+    using SafeERC20 for IERC20;
+    
     ILicense public licenseContract;
     IArtworkForMarket public artworkContract;
+    PaymentTokenManager public paymentTokenManager;
 
     address public platformWallet;
     address public nationalFund;
@@ -46,9 +52,15 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
     uint256 public constant PLATFORM_BP = 400; // 4%
     uint256 public constant NATIONAL_BP = 100; // 1%
 
+    // ETH balances (existing)
     mapping(address => uint256) public creatorBalances;
     uint256 public platformBalance;
     uint256 public nationalBalance;
+    
+    // ERC20 token balances
+    mapping(address => mapping(address => uint256)) public creatorTokenBalances; // creator => token => balance
+    mapping(address => uint256) public platformTokenBalances; // token => balance
+    mapping(address => uint256) public nationalTokenBalances; // token => balance
 
     // Analytics tracking
     mapping(uint256 => uint256) public totalSales; // licenseId => total units sold
@@ -66,21 +78,28 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
     }
     mapping(uint256 => Listing) public listings; // licenseId => Listing info
 
-    event LicensePurchased(uint256 indexed licenseId, address indexed buyer, uint256 pricePaid, uint256 amount);
-    event BatchPurchaseCompleted(address indexed buyer, uint256[] licenseIds, uint256[] amounts, uint256 totalCost);
-    event EarningsWithdrawn(address indexed recipient, uint256 amount);
-    event PlatformWithdrawn(address indexed to, uint256 amount);
-    event NationalWithdrawn(address indexed to, uint256 amount);
+    event LicensePurchased(uint256 indexed licenseId, address indexed buyer, uint256 pricePaid, uint256 amount, address paymentToken);
+    event BatchPurchaseCompleted(address indexed buyer, uint256[] licenseIds, uint256[] amounts, uint256 totalCost, address paymentToken);
+    event EarningsWithdrawn(address indexed recipient, uint256 amount, address token);
+    event PlatformWithdrawn(address indexed to, uint256 amount, address token);
+    event NationalWithdrawn(address indexed to, uint256 amount, address token);
     event LicenseListed(uint256 indexed licenseId, address indexed seller, uint256 amount, uint256 price);
     event ListingCancelled(uint256 indexed licenseId, address indexed seller);
     event PriceUpdated(uint256 indexed licenseId, uint256 newPrice);
 
-    constructor(address _artworkContract, address _licenseContract, address _platformWallet, address _nationalFund) Ownable(msg.sender) {
-        require(_artworkContract != address(0) && _licenseContract != address(0) && _platformWallet != address(0) && _nationalFund != address(0), "Invalid address");
+    constructor(
+        address _artworkContract, 
+        address _licenseContract, 
+        address _platformWallet, 
+        address _nationalFund,
+        address _paymentTokenManager
+    ) Ownable(msg.sender) {
+        require(_artworkContract != address(0) && _licenseContract != address(0) && _platformWallet != address(0) && _nationalFund != address(0) && _paymentTokenManager != address(0), "Invalid address");
         artworkContract = IArtworkForMarket(_artworkContract);
         licenseContract = ILicense(_licenseContract);
         platformWallet = _platformWallet;
         nationalFund = _nationalFund;
+        paymentTokenManager = PaymentTokenManager(_paymentTokenManager);
     }
 
     /**
@@ -115,7 +134,7 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
     }
 
     /**
-     * @notice Buy license with gas-optimized distribution
+     * @notice Buy license with ETH payment (legacy function)
      * @dev Enhanced with analytics tracking
      */
     function buyLicense(uint256 licenseId, uint256 amount) external payable nonReentrant whenNotPaused {
@@ -131,7 +150,7 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         require(msg.value >= totalPrice, "Insufficient payment");
 
         // Process the purchase using helper function
-        _processPurchase(licenseId, amount);
+        _processPurchase(licenseId, amount, address(0));
 
         // Handle refund if overpaid
         if (msg.value > totalPrice) {
@@ -144,10 +163,54 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
     }
 
     /**
+     * @notice Buy license with multi-token payment support
+     * @dev Supports both ETH (address(0)) and ERC20 tokens
+     */
+    function buyLicenseWithToken(uint256 licenseId, uint256 amount, address paymentToken) external payable nonReentrant whenNotPaused {
+        require(amount > 0, "Amount zero");
+
+        uint256 pricePerUnit = licenseContract.licensePrice(licenseId);
+        require(pricePerUnit > 0, "License not for sale");
+
+        uint256 marketBalance = licenseContract.balanceOf(address(this), licenseId);
+        require(marketBalance >= amount, "Insufficient marketplace supply");
+
+        uint256 totalPrice = pricePerUnit * amount;
+
+        if (paymentToken == address(0)) {
+            // ETH payment
+            require(msg.value >= totalPrice, "Insufficient payment");
+            _processPurchase(licenseId, amount, address(0));
+            
+            // Handle refund if overpaid
+            if (msg.value > totalPrice) {
+                unchecked {
+                    uint256 refund = msg.value - totalPrice;
+                    (bool rc, ) = msg.sender.call{value: refund}("");
+                    require(rc, "Refund failed");
+                }
+            }
+        } else {
+            // ERC20 token payment
+            require(paymentTokenManager.isTokenSupported(paymentToken), "Token not supported");
+            require(msg.value == 0, "ETH not needed for token payment");
+            
+            IERC20 token = IERC20(paymentToken);
+            require(token.balanceOf(msg.sender) >= totalPrice, "Insufficient token balance");
+            require(token.allowance(msg.sender, address(this)) >= totalPrice, "Insufficient token allowance");
+            
+            // Transfer tokens from buyer to marketplace
+            token.safeTransferFrom(msg.sender, address(this), totalPrice);
+            
+            _processPurchase(licenseId, amount, paymentToken);
+        }
+    }
+
+    /**
      * @notice Process a single license purchase
      * @dev Helper function to reduce stack depth
      */
-    function _processPurchase(uint256 licenseId, uint256 amount) internal {
+    function _processPurchase(uint256 licenseId, uint256 amount, address paymentToken) internal {
         uint256 pricePerUnit = licenseContract.licensePrice(licenseId);
         uint256 totalPrice = pricePerUnit * amount;
         uint256 royaltyBP = licenseContract.licenseRoyalty(licenseId);
@@ -161,15 +224,24 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         uint256 nationalAmount = (totalPrice * NATIONAL_BP) / 10000;
         uint256 sellerAmount = totalPrice - royaltyAmount - platformAmount - nationalAmount;
 
-        creatorBalances[creator] += (sellerAmount + royaltyAmount);
-        platformBalance += platformAmount;
-        nationalBalance += nationalAmount;
+        if (paymentToken == address(0)) {
+            // ETH payment
+            creatorBalances[creator] += (sellerAmount + royaltyAmount);
+            platformBalance += platformAmount;
+            nationalBalance += nationalAmount;
+        } else {
+            // ERC20 token payment
+            creatorTokenBalances[creator][paymentToken] += (sellerAmount + royaltyAmount);
+            platformTokenBalances[paymentToken] += platformAmount;
+            nationalTokenBalances[paymentToken] += nationalAmount;
+        }
+        
         totalSales[licenseId] += amount;
         creatorRevenue[creator] += (sellerAmount + royaltyAmount);
         totalVolume += totalPrice;
 
         licenseContract.safeTransferFrom(address(this), msg.sender, licenseId, amount, "");
-        emit LicensePurchased(licenseId, msg.sender, totalPrice, amount);
+        emit LicensePurchased(licenseId, msg.sender, totalPrice, amount, paymentToken);
     }
 
     /**
@@ -207,12 +279,12 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
 
         // Process each purchase
         for (uint256 i = 0; i < licenseIds.length; ) {
-            _processPurchase(licenseIds[i], amounts[i]);
+            _processPurchase(licenseIds[i], amounts[i], address(0));
             unchecked { i++; }
         }
 
         // Emit batch purchase event
-        emit BatchPurchaseCompleted(msg.sender, licenseIds, amounts, totalCost);
+        emit BatchPurchaseCompleted(msg.sender, licenseIds, amounts, totalCost, address(0));
 
         // Refund excess
         if (msg.value > totalCost) {
@@ -223,6 +295,76 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         }
     }
 
+    /**
+     * @notice Batch purchase multiple license types with multi-token support
+     * @dev Gas savings from batched transfers
+     */
+    function batchBuyLicenseWithToken(
+        uint256[] calldata licenseIds,
+        uint256[] calldata amounts,
+        address paymentToken
+    ) external payable nonReentrant whenNotPaused {
+        require(licenseIds.length == amounts.length, "Array length mismatch");
+        require(licenseIds.length > 0 && licenseIds.length <= 10, "Invalid batch size");
+
+        uint256 totalCost = 0;
+        for (uint256 i = 0; i < licenseIds.length; ) {
+            uint256 licenseId = licenseIds[i];
+            uint256 amount = amounts[i];
+            require(amount > 0, "Amount zero");
+
+            uint256 pricePerUnit = licenseContract.licensePrice(licenseId);
+            require(pricePerUnit > 0, "License not for sale");
+
+            uint256 marketBalance = licenseContract.balanceOf(address(this), licenseId);
+            require(marketBalance >= amount, "Insufficient supply");
+
+            unchecked {
+                totalCost += pricePerUnit * amount;
+                i++;
+            }
+        }
+
+        if (paymentToken == address(0)) {
+            // ETH payment
+            require(msg.value >= totalCost, "Insufficient payment");
+            
+            // Process each purchase
+            for (uint256 i = 0; i < licenseIds.length; ) {
+                _processPurchase(licenseIds[i], amounts[i], address(0));
+                unchecked { i++; }
+            }
+            
+            // Refund excess
+            if (msg.value > totalCost) {
+                unchecked {
+                    (bool rc, ) = msg.sender.call{value: msg.value - totalCost}("");
+                    require(rc, "Refund failed");
+                }
+            }
+        } else {
+            // ERC20 token payment
+            require(paymentTokenManager.isTokenSupported(paymentToken), "Token not supported");
+            require(msg.value == 0, "ETH not needed for token payment");
+            
+            IERC20 token = IERC20(paymentToken);
+            require(token.balanceOf(msg.sender) >= totalCost, "Insufficient token balance");
+            require(token.allowance(msg.sender, address(this)) >= totalCost, "Insufficient token allowance");
+            
+            // Transfer tokens from buyer to marketplace
+            token.safeTransferFrom(msg.sender, address(this), totalCost);
+            
+            // Process each purchase
+            for (uint256 i = 0; i < licenseIds.length; ) {
+                _processPurchase(licenseIds[i], amounts[i], paymentToken);
+                unchecked { i++; }
+            }
+        }
+
+        // Emit batch purchase event
+        emit BatchPurchaseCompleted(msg.sender, licenseIds, amounts, totalCost, paymentToken);
+    }
+
     // Creator withdraw earnings
     function withdrawEarnings() external nonReentrant {
         uint256 bal = creatorBalances[msg.sender];
@@ -230,7 +372,32 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         creatorBalances[msg.sender] = 0;
         (bool ok, ) = msg.sender.call{value: bal}("");
         require(ok, "Transfer failed");
-        emit EarningsWithdrawn(msg.sender, bal);
+        emit EarningsWithdrawn(msg.sender, bal, address(0));
+    }
+
+    /**
+     * @notice Withdraw earnings in specific token
+     * @param token Address of the token to withdraw (address(0) for ETH)
+     */
+    function withdrawEarnings(address token) external nonReentrant {
+        if (token == address(0)) {
+            // ETH withdrawal
+            uint256 bal = creatorBalances[msg.sender];
+            require(bal > 0, "No earnings");
+            creatorBalances[msg.sender] = 0;
+            (bool ok, ) = msg.sender.call{value: bal}("");
+            require(ok, "Transfer failed");
+            emit EarningsWithdrawn(msg.sender, bal, address(0));
+        } else {
+            // ERC20 token withdrawal
+            require(paymentTokenManager.isTokenSupported(token), "Token not supported");
+            uint256 bal = creatorTokenBalances[msg.sender][token];
+            require(bal > 0, "No earnings");
+            creatorTokenBalances[msg.sender][token] = 0;
+            
+            IERC20(token).safeTransfer(msg.sender, bal);
+            emit EarningsWithdrawn(msg.sender, bal, token);
+        }
     }
 
     // Platform withdraw
@@ -241,7 +408,34 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         platformBalance = 0;
         (bool ok, ) = platformWallet.call{value: bal}("");
         require(ok, "Platform transfer failed");
-        emit PlatformWithdrawn(platformWallet, bal);
+        emit PlatformWithdrawn(platformWallet, bal, address(0));
+    }
+
+    /**
+     * @notice Withdraw platform earnings in specific token
+     * @param token Address of the token to withdraw (address(0) for ETH)
+     */
+    function withdrawPlatform(address token) external nonReentrant {
+        require(msg.sender == platformWallet || msg.sender == owner(), "Not authorized");
+        
+        if (token == address(0)) {
+            // ETH withdrawal
+            uint256 bal = platformBalance;
+            require(bal > 0, "No platform balance");
+            platformBalance = 0;
+            (bool ok, ) = platformWallet.call{value: bal}("");
+            require(ok, "Platform transfer failed");
+            emit PlatformWithdrawn(platformWallet, bal, address(0));
+        } else {
+            // ERC20 token withdrawal
+            require(paymentTokenManager.isTokenSupported(token), "Token not supported");
+            uint256 bal = platformTokenBalances[token];
+            require(bal > 0, "No platform balance");
+            platformTokenBalances[token] = 0;
+            
+            IERC20(token).safeTransfer(platformWallet, bal);
+            emit PlatformWithdrawn(platformWallet, bal, token);
+        }
     }
 
     // National fund withdraw
@@ -252,7 +446,34 @@ contract Marketplace is ReentrancyGuard, Ownable, Pausable, IERC1155Receiver {
         nationalBalance = 0;
         (bool ok, ) = nationalFund.call{value: bal}("");
         require(ok, "National transfer failed");
-        emit NationalWithdrawn(nationalFund, bal);
+        emit NationalWithdrawn(nationalFund, bal, address(0));
+    }
+
+    /**
+     * @notice Withdraw national fund earnings in specific token
+     * @param token Address of the token to withdraw (address(0) for ETH)
+     */
+    function withdrawNational(address token) external nonReentrant {
+        require(msg.sender == nationalFund || msg.sender == owner(), "Not authorized");
+        
+        if (token == address(0)) {
+            // ETH withdrawal
+            uint256 bal = nationalBalance;
+            require(bal > 0, "No national balance");
+            nationalBalance = 0;
+            (bool ok, ) = nationalFund.call{value: bal}("");
+            require(ok, "National transfer failed");
+            emit NationalWithdrawn(nationalFund, bal, address(0));
+        } else {
+            // ERC20 token withdrawal
+            require(paymentTokenManager.isTokenSupported(token), "Token not supported");
+            uint256 bal = nationalTokenBalances[token];
+            require(bal > 0, "No national balance");
+            nationalTokenBalances[token] = 0;
+            
+            IERC20(token).safeTransfer(nationalFund, bal);
+            emit NationalWithdrawn(nationalFund, bal, token);
+        }
     }
 
     // Owner can set platform and national addresses

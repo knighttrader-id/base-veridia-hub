@@ -5,6 +5,19 @@ import Artwork from '../abi/Artwork.json';
 import License from '../abi/License.json';
 import Marketplace from '../abi/Marketplace.json';
 
+// Type definitions for contract ABIs
+type ContractABI = readonly (string | ethers.Fragment | ethers.JsonFragment)[];
+
+// Type for parsed log
+interface ParsedLog {
+  name: string;
+  args: {
+    tokenId?: ethers.BigNumberish;
+    licenseId?: ethers.BigNumberish;
+    [key: string]: unknown;
+  };
+}
+
 // Types for on-chain operations
 export interface OnChainArtwork {
   tokenId: string;
@@ -49,11 +62,13 @@ export class ArtworkService {
     if (!provider) return [];
     
     try {
-      const contract = getContract(CONTRACTS.Artwork, (Artwork as any).abi, provider);
+      const contract = getContract(CONTRACTS.Artwork, Artwork.abi as ContractABI, provider);
       
       // Query WorkRegistered events
-      const eventIface = new ethers.Interface((Artwork as any).abi);
-      const topic = eventIface.getEvent("WorkRegistered").topicHash;
+      const eventIface = new ethers.Interface(Artwork.abi as ContractABI);
+      const event = eventIface.getEvent("WorkRegistered");
+      if (!event) throw new Error("WorkRegistered event not found in ABI");
+      const topic = event.topicHash;
       const logs = await provider.getLogs({
         address: CONTRACTS.Artwork,
         topics: [topic],
@@ -63,15 +78,19 @@ export class ArtworkService {
       
       const artworks: OnChainArtwork[] = [];
       for (const log of logs) {
-        const parsed = eventIface.parseLog(log);
-        const tokenId = parsed.args.tokenId.toString();
+        const parsed = eventIface.parseLog(log) as ParsedLog;
+        if (!parsed) continue;
+        const tokenId = parsed.args.tokenId?.toString();
+        if (!tokenId) continue;
         
         try {
           const [contentHash, title, description, metadataURI, creator] = await contract.getWork(tokenId);
           let tokenURI: string | undefined = undefined;
           try { 
             tokenURI = await contract.tokenURI(tokenId); 
-          } catch {}
+          } catch (error) {
+            console.warn(`Failed to get tokenURI for ${tokenId}:`, error);
+          }
           
           artworks.push({
             tokenId,
@@ -103,7 +122,7 @@ export class ArtworkService {
     const signer = await getSigner();
     if (!signer) throw new Error('Wallet not connected');
     
-    const contract = getContract(CONTRACTS.Artwork, (Artwork as any).abi, signer);
+    const contract = getContract(CONTRACTS.Artwork, Artwork.abi as ContractABI, signer);
     const tx = await contract.mintArtwork(
       params.contentHashHex,
       params.title,
@@ -114,17 +133,18 @@ export class ArtworkService {
     const receipt = await tx.wait();
     
     // Extract tokenId from event
-    const eventIface = new ethers.Interface((Artwork as any).abi);
-    const event = receipt.logs.find(log => {
+    const eventIface = new ethers.Interface(Artwork.abi as ContractABI);
+    const event = receipt.logs.find((log: ethers.Log) => {
       try {
-        const parsed = eventIface.parseLog(log);
+        const parsed = eventIface.parseLog(log) as ParsedLog;
         return parsed && parsed.name === "WorkRegistered";
-      } catch {
+      } catch (error) {
+        console.warn('Failed to parse log:', error);
         return false;
       }
     });
     
-    const tokenId = event ? eventIface.parseLog(event).args.tokenId.toString() : "0";
+    const tokenId = event ? (eventIface.parseLog(event) as ParsedLog).args.tokenId?.toString() || "0" : "0";
     
     return { txHash: receipt.hash, tokenId };
   }
@@ -134,7 +154,7 @@ export class ArtworkService {
     if (!provider) return [];
     
     try {
-      const contract = getContract(CONTRACTS.Artwork, (Artwork as any).abi, provider);
+      const contract = getContract(CONTRACTS.Artwork, Artwork.abi as ContractABI, provider);
       const tokenIds = await contract.getCreatorTokens(creatorAddress);
       
       const artworks: OnChainArtwork[] = [];
@@ -144,7 +164,9 @@ export class ArtworkService {
           let tokenURI: string | undefined = undefined;
           try { 
             tokenURI = await contract.tokenURI(tokenId.toString()); 
-          } catch {}
+          } catch (error) {
+            console.warn(`Failed to get tokenURI for ${tokenId}:`, error);
+          }
           
           artworks.push({
             tokenId: tokenId.toString(),
@@ -175,11 +197,13 @@ export class LicenseService {
     if (!provider) return [];
     
     try {
-      const contract = getContract(CONTRACTS.License, (License as any).abi, provider);
-      
-      // Query LicenseMinted events
-      const eventIface = new ethers.Interface((License as any).abi);
-      const topic = eventIface.getEvent("LicenseMinted").topicHash;
+    const contract = getContract(CONTRACTS.License, License.abi as ContractABI, provider);
+    
+    // Query LicenseMinted events
+    const eventIface = new ethers.Interface(License.abi as ContractABI);
+      const event = eventIface.getEvent("LicenseMinted");
+      if (!event) throw new Error("LicenseMinted event not found in ABI");
+      const topic = event.topicHash;
       const logs = await provider.getLogs({
         address: CONTRACTS.License,
         topics: [topic],
@@ -189,8 +213,10 @@ export class LicenseService {
       
       const licenses: OnChainLicense[] = [];
       for (const log of logs) {
-        const parsed = eventIface.parseLog(log);
-        const licenseId = parsed.args.licenseId.toString();
+        const parsed = eventIface.parseLog(log) as ParsedLog;
+        if (!parsed) continue;
+        const licenseId = parsed.args.licenseId?.toString();
+        if (!licenseId) continue;
         
         try {
           const metadata = await contract.getLicenseMetadata(licenseId);
@@ -227,7 +253,7 @@ export class LicenseService {
     const signer = await getSigner();
     if (!signer) throw new Error('Wallet not connected');
     
-    const contract = getContract(CONTRACTS.License, (License as any).abi, signer);
+    const contract = getContract(CONTRACTS.License, License.abi as ContractABI, signer);
     const tx = await contract.mintLicense(
       params.workHash,
       params.amount,
@@ -240,17 +266,18 @@ export class LicenseService {
     const receipt = await tx.wait();
     
     // Extract licenseId from event
-    const eventIface = new ethers.Interface((License as any).abi);
-    const event = receipt.logs.find(log => {
+    const eventIface = new ethers.Interface(License.abi as ContractABI);
+    const event = receipt.logs.find((log: ethers.Log) => {
       try {
-        const parsed = eventIface.parseLog(log);
+        const parsed = eventIface.parseLog(log) as ParsedLog;
         return parsed && parsed.name === "LicenseMinted";
-      } catch {
+      } catch (error) {
+        console.warn('Failed to parse log:', error);
         return false;
       }
     });
     
-    const licenseId = event ? eventIface.parseLog(event).args.licenseId.toString() : "0";
+    const licenseId = event ? (eventIface.parseLog(event) as ParsedLog).args.licenseId?.toString() || "0" : "0";
     
     return { txHash: receipt.hash, licenseId };
   }
@@ -263,11 +290,13 @@ export class MarketplaceService {
     if (!provider) return [];
     
     try {
-      const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, provider);
+      const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, provider);
       
       // Query LicenseListed events
-      const eventIface = new ethers.Interface((Marketplace as any).abi);
-      const topic = eventIface.getEvent("LicenseListed").topicHash;
+      const eventIface = new ethers.Interface(Marketplace.abi as ContractABI);
+      const event = eventIface.getEvent("LicenseListed");
+      if (!event) throw new Error("LicenseListed event not found in ABI");
+      const topic = event.topicHash;
       const logs = await provider.getLogs({
         address: CONTRACTS.Marketplace,
         topics: [topic],
@@ -277,8 +306,10 @@ export class MarketplaceService {
       
       const listings: OnChainListing[] = [];
       for (const log of logs) {
-        const parsed = eventIface.parseLog(log);
-        const licenseId = parsed.args.licenseId.toString();
+        const parsed = eventIface.parseLog(log) as ParsedLog;
+        if (!parsed) continue;
+        const licenseId = parsed.args.licenseId?.toString();
+        if (!licenseId) continue;
         
         try {
           const listing = await contract.listings(licenseId);
@@ -310,7 +341,7 @@ export class MarketplaceService {
     const signer = await getSigner();
     if (!signer) throw new Error('Wallet not connected');
     
-    const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, signer);
+    const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, signer);
     const tx = await contract.listLicense(
       params.licenseId,
       params.amount,
@@ -325,19 +356,33 @@ export class MarketplaceService {
     licenseId: string;
     amount: string;
     value: string;
+    paymentToken?: string;
   }): Promise<{ txHash: string }> {
     const signer = await getSigner();
     if (!signer) throw new Error('Wallet not connected');
     
-    const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, signer);
-    const tx = await contract.buyLicense(
-      params.licenseId,
-      params.amount,
-      { value: ethers.parseEther(params.value) }
-    );
+    const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, signer);
     
-    const receipt = await tx.wait();
-    return { txHash: receipt.hash };
+    if (!params.paymentToken || params.paymentToken === '0x0000000000000000000000000000000000000000') {
+      // ETH payment (legacy)
+      const tx = await contract.buyLicense(
+        params.licenseId,
+        params.amount,
+        { value: ethers.parseEther(params.value) }
+      );
+      const receipt = await tx.wait();
+      return { txHash: receipt.hash };
+    } else {
+      // ERC20 token payment
+      const tx = await contract.buyLicenseWithToken(
+        params.licenseId,
+        params.amount,
+        params.paymentToken,
+        { value: 0 }
+      );
+      const receipt = await tx.wait();
+      return { txHash: receipt.hash };
+    }
   }
 
   static async getMarketplaceStats(): Promise<MarketplaceStats> {
@@ -345,7 +390,7 @@ export class MarketplaceService {
     if (!provider) throw new Error('No provider available');
     
     try {
-      const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, provider);
+      const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, provider);
       const [volume, platformBalance, nationalBalance] = await contract.getMarketplaceStats();
       
       return {
@@ -367,7 +412,7 @@ export class MarketplaceService {
     const signer = await getSigner();
     if (!signer) throw new Error('Wallet not connected');
     
-    const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, signer);
+    const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, signer);
     const tx = await contract.withdrawEarnings();
     
     const receipt = await tx.wait();
@@ -379,7 +424,7 @@ export class MarketplaceService {
     if (!provider) return "0";
     
     try {
-      const contract = getContract(CONTRACTS.Marketplace, (Marketplace as any).abi, provider);
+      const contract = getContract(CONTRACTS.Marketplace, Marketplace.abi as ContractABI, provider);
       const balance = await contract.creatorBalance(creatorAddress);
       return ethers.formatEther(balance);
     } catch (error) {

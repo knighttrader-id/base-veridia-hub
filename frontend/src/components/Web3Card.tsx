@@ -51,8 +51,8 @@ export function Web3Card({
         ${isFeatured ? 'ring-2 ring-blue-500/50' : ''}
         ${className}
       `}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => {}}
+      onMouseLeave={() => {}}
       onClick={onClick}
     >
       {/* Glow effect */}
