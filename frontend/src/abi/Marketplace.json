@@ -1,0 +1,72 @@
+{
+  "abi": [
+    {
+      "type": "function",
+      "name": "buyLicense",
+      "stateMutability": "payable",
+      "inputs": [
+        {
+          "name": "licenseId",
+          "type": "uint256"
+        },
+        {
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "event",
+      "name": "LicensePurchased",
+      "inputs": [
+        {
+          "indexed": true,
+          "name": "licenseId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "name": "pricePaid",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "name": "amount",
+          "type": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "BatchPurchaseCompleted",
+      "inputs": [
+        {
+          "indexed": true,
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "name": "licenseIds",
+          "type": "uint256[]"
+        },
+        {
+          "indexed": false,
+          "name": "amounts",
+          "type": "uint256[]"
+        },
+        {
+          "indexed": false,
+          "name": "totalCost",
+          "type": "uint256"
+        }
+      ]
+    }
+  ]
+}
