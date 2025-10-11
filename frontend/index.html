@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeridiaHub - Copyright Recording</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        form { max-width: 500px; margin: auto; }
+        input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>VeridiaHub - Record Your Copyright</h1>
+    <form id="uploadForm">
+        <input type="file" id="fileInput" required>
+        <input type="text" id="title" placeholder="Work Title" required>
+        <textarea id="description" placeholder="Description" rows="4"></textarea>
+        <button type="submit">Upload and Record Copyright</button>
+    </form>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('fileInput');
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+
+            if (!fileInput.files[0]) {
+                alert('Please select a file');
+                return;
+            }
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = 'Uploading...';
+
+            try {
+                // Upload file to backend
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+
+                const uploadResponse = await fetch('http://localhost:3001/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) throw new Error('Upload failed');
+
+                const uploadData = await uploadResponse.json();
+
+                // Record copyright
+                const recordResponse = await fetch('http://localhost:3001/api/record-copyright', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        hash: uploadData.hash,
+                        title,
+                        description
+                    })
+                });
+
+                if (!recordResponse.ok) throw new Error('Recording failed');
+
+                const recordData = await recordResponse.json();
+
+                resultDiv.innerHTML = `
+                    <h3>Success!</h3>
+                    <p>Hash: ${uploadData.hash}</p>
+                    <p>Transaction: ${recordData.transactionHash}</p>
+                    <p>Work ID: ${recordData.workId}</p>
+                `;
+            } catch (error) {
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
