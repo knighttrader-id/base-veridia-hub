@@ -146,6 +146,11 @@ export function isETH(tokenAddress: string): boolean {
   return tokenAddress === '0x0000000000000000000000000000000000000000';
 }
 
+// Get native token (ETH)
+export function getNativeToken(): TokenInfo {
+  return getTokenBySymbol('ETH') || Object.values(getActiveTokens())[0];
+}
+
 // Get default payment token
 export function getDefaultPaymentToken(): TokenInfo {
   return getTokenBySymbol('ETH') || Object.values(getActiveTokens())[0];

@@ -67,16 +67,16 @@ export default function Web3Marketplace() {
       const nativeToken = getNativeToken();
       
       // Load native token balance
-      const nativeBalance = await TokenService.getBalance(nativeToken.address, account);
-      balances[nativeToken.address] = nativeBalance;
+      const nativeBalance = await TokenService.getTokenBalance(nativeToken.address, account);
+      balances[nativeToken.address] = nativeBalance?.formatted || '0';
       
       // Load other token balances
       for (const token of ['USDC', 'USDT', 'DAI', 'IDRX']) {
         try {
           const tokenAddress = process.env[`REACT_APP_${token}_ADDRESS`] || '0x0000000000000000000000000000000000000000';
           if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-            const balance = await TokenService.getBalance(tokenAddress, account);
-            balances[tokenAddress] = balance;
+            const balance = await TokenService.getTokenBalance(tokenAddress, account);
+            balances[tokenAddress] = balance?.formatted || '0';
           }
         } catch (err) {
           console.warn(`Failed to load ${token} balance:`, err);

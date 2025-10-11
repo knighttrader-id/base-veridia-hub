@@ -134,7 +134,7 @@ export function AnimatedBackground({
             animation: 'grid-move 20s linear infinite'
           }}
         />
-        <style jsx>{`
+        <style>{`
           @keyframes grid-move {
             0% { transform: translate(0, 0); }
             100% { transform: translate(50px, 50px); }
@@ -202,7 +202,7 @@ export function GlitchEffect({ children, intensity = 'low' }: { children: React.
       }}>
         {children}
       </div>
-      <style jsx>{`
+      <style>{`
         @keyframes glitch {
           0%, 100% { transform: translate(0); }
           20% { transform: translate(-2px, 2px); }
