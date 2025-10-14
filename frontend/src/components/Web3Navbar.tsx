@@ -7,10 +7,11 @@ interface Web3NavbarProps {
   className?: string;
 }
 
-export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
+export function Web3Navbar({  className = '' }: Web3NavbarProps) {
   const { account, isConnected, connectWallet, disconnectWallet, balance } = useWallet();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,10 +40,14 @@ export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <button
-              onClick={onMenuClick}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
             >
-              <Menu className="h-6 w-6 text-white" />
+              {isMobileMenuOpen ? (
+                <X className="h-6 w-6 text-white" />
+              ) : (
+                <Menu className="h-6 w-6 text-white" />
+              )}
             </button>
             
             <div className="flex items-center gap-3">
@@ -87,7 +92,7 @@ export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
             </div>
 
             {/* Notifications */}
-            <div className="relative">
+            <div className="relative hidden md:block">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="p-2 rounded-lg hover:bg-white/10 transition-colors relative"
@@ -118,7 +123,7 @@ export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
 
             {/* Wallet Connection */}
             {isConnected ? (
-              <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-3">
                 <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-3 py-2">
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                   <span className="text-white font-medium text-sm">
@@ -152,7 +157,8 @@ export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
                 className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center gap-2"
               >
                 <Wallet className="h-4 w-4" />
-                Connect Wallet
+                <span className="hidden md:inline">Connect Wallet</span>
+                <span className="md:hidden">Connect</span>
               </button>
             )}
           </div>
@@ -160,8 +166,137 @@ export function Web3Navbar({ onMenuClick, className = '' }: Web3NavbarProps) {
       </div>
 
       {/* Mobile menu overlay */}
-      <div className="lg:hidden">
-        {/* Mobile menu content would go here */}
+      <div className={`lg:hidden transition-all duration-300 ease-in-out ${
+        isMobileMenuOpen 
+          ? 'max-h-screen opacity-100' 
+          : 'max-h-0 opacity-0 overflow-hidden'
+      }`}>
+        <div className="bg-black/95 backdrop-blur-xl border-b border-white/10 px-4 pb-4">
+          <div className="space-y-2 pt-2">
+            {/* Navigation Links */}
+            <a 
+              href="/" 
+              className="block px-4 py-3 rounded-lg text-white hover:bg-white/10 transition-colors font-medium"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Home
+            </a>
+            <a 
+              href="/marketplace" 
+              className="block px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Marketplace
+            </a>
+            <a 
+              href="/upload" 
+              className="block px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Upload
+            </a>
+            <a 
+              href="/ip-registry" 
+              className="block px-4 py-3 rounded-lg text-gray-300 hover:bg-white/10 transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Registry
+            </a>
+            
+            {/* Mobile Search */}
+            <div className="pt-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search artworks..."
+                  className="w-full pl-10 pr-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Mobile Wallet Section */}
+            {isConnected ? (
+              <div className="pt-2 space-y-2">
+                {/* Wallet Info */}
+                <div className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span className="text-white font-medium text-sm">
+                      {formatAddress(account!)}
+                    </span>
+                  </div>
+                  {balance && (
+                    <span className="text-gray-400 text-sm">
+                      {parseFloat(balance).toFixed(3)} ETH
+                    </span>
+                  )}
+                </div>
+
+                {/* Mobile Action Buttons */}
+                <div className="flex items-center gap-2 px-2">
+                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white">
+                    <User className="h-4 w-4" />
+                    <span className="text-sm">Profile</span>
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white">
+                    <Settings className="h-4 w-4" />
+                    <span className="text-sm">Settings</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      disconnectWallet();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors text-red-400"
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="text-sm">Disconnect</span>
+                  </button>
+                </div>
+
+                {/* Mobile Notifications */}
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4" />
+                    <span className="text-sm">Notifications</span>
+                  </div>
+                  <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                </button>
+
+                {showNotifications && (
+                  <div className="bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg p-3 space-y-2">
+                    <div className="text-xs text-gray-300">
+                      New artwork uploaded by 0x1234...5678
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      License purchased for "Digital Sunset"
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      Your artwork "Abstract Waves" got 5 new views
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    connectWallet();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Connect Wallet
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </nav>
   );
