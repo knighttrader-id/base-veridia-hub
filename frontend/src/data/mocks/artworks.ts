@@ -111,12 +111,7 @@ const generatePrice = (): string => {
   return prices[Math.floor(Math.random() * prices.length)].toString();
 };
 
-// Generate ETH equivalent prices (for display purposes)
-const generateETHPrice = (usdtPrice: string): string => {
-  const usdt = parseFloat(usdtPrice);
-  const ethPrice = usdt / 3000; // Assume 1 ETH = $3000
-  return ethPrice.toFixed(4);
-};
+
 
 // Generate other stablecoin prices (1:1 conversion for demo)
 const generateStablecoinPrice = (usdtPrice: string): string => {
@@ -197,10 +192,13 @@ const generateFileInfo = (category: string) => {
     'music': ['3:45', '4:12', '5:30', '2:58', '6:15']
   };
   
+  // Type assertion to fix TypeScript indexing error
+  const categoryKey = category as keyof typeof formats;
+  
   return {
-    format: formats[category][Math.floor(Math.random() * formats[category].length)],
+    format: formats[categoryKey][Math.floor(Math.random() * formats[categoryKey].length)],
     size: sizes[Math.floor(Math.random() * sizes.length)],
-    dimensions: dimensions[category][Math.floor(Math.random() * dimensions[category].length)]
+    dimensions: dimensions[categoryKey][Math.floor(Math.random() * dimensions[categoryKey].length)]
   };
 };
 
