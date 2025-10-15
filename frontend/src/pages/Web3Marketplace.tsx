@@ -246,7 +246,12 @@ export default function Web3Marketplace() {
           subtitle="Web3 Copyright Marketplace"
           description="Discover, trade, and monetize digital artworks on the blockchain. Experience the future of creative ownership with our decentralized platform."
           ctaText="Start Creating"
-          onCtaClick={() => {}}
+          onCtaClick={() => {
+            console.log('Start Creating clicked');
+            alert('Start Creating clicked! Redirecting to upload page...');
+            // Navigate to upload page
+            window.location.href = '/upload';
+          }}
               stats={[
                 { label: 'Total Artworks', value: '2,500+', icon: <Zap className="w-6 h-6" /> },
                 { label: 'Active Creators', value: '1,200+', icon: <Users className="w-6 h-6" /> },

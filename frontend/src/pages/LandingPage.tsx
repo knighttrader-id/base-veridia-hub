@@ -123,7 +123,15 @@ export default function LandingPage() {
                 Mulai Gratis Sekarang
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
-              <button className="inline-flex items-center px-8 py-4 border-2 border-gray-300 text-gray-700 text-lg font-semibold rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
+              <button 
+                onClick={() => {
+                  console.log('Lihat Demo clicked');
+                  alert('Lihat Demo clicked! Redirecting to marketplace...');
+                  // Navigate to marketplace
+                  window.location.href = '/marketplace';
+                }}
+                className="inline-flex items-center px-8 py-4 border-2 border-gray-300 text-gray-700 text-lg font-semibold rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all duration-200"
+              >
                 <Play className="mr-2 h-5 w-5" />
                 Lihat Demo
               </button>
