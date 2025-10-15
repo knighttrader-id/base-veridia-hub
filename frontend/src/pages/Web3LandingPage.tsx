@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { AnimatedBackground, FloatingElements } from '../components/AnimatedBackground';
 import { Web3Navbar } from '../components/Web3Navbar';
+import DemoModeBadge from '../components/DemoModeBadge';
 import { Web3Card } from '../components/Web3Card';
 
 export default function Web3LandingPage() {
@@ -61,10 +62,10 @@ export default function Web3LandingPage() {
   ];
 
   const stats = [
-    { label: "Tests Passing", value: "154/154", icon: <Award className="h-6 w-6" /> },
-    { label: "Supported Tokens", value: "5", icon: <Zap className="h-6 w-6" /> },
-    { label: "Gas Savings", value: "20-33%", icon: <Rocket className="h-6 w-6" /> },
-    { label: "Production Ready", value: "100%", icon: <Shield className="h-6 w-6" /> }
+    { label: "Total Artworks", value: "2,500+", icon: <Zap className="h-6 w-6" /> },
+    { label: "Active Creators", value: "1,200+", icon: <Users className="h-6 w-6" /> },
+    { label: "Total Sales", value: "850,000 USDT", icon: <TrendingUp className="h-6 w-6" /> },
+    { label: "Avg. Price", value: "340 USDT", icon: <Award className="h-6 w-6" /> }
   ];
 
   const testimonials = [
@@ -99,6 +100,9 @@ export default function Web3LandingPage() {
       
       {/* Web3 Navbar */}
       <Web3Navbar />
+      
+      {/* Demo Mode Badge */}
+      <DemoModeBadge />
 
       <div className="relative z-10">
         {/* Hero Section */}
@@ -137,15 +141,15 @@ export default function Web3LandingPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-20">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20">
               {stats.map((stat, index) => (
                 <div key={index} className="text-center group">
                   <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 hover:bg-white/20 transition-all duration-300 transform hover:scale-105">
-                    <div className="text-3xl font-bold text-white mb-2 flex items-center justify-center gap-2">
+                    <div className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center justify-center gap-2 whitespace-nowrap">
                       {stat.icon}
-                      {stat.value}
+                      <span className="truncate">{stat.value}</span>
                     </div>
-                    <div className="text-gray-400">{stat.label}</div>
+                    <div className="text-gray-400 text-sm">{stat.label}</div>
                   </div>
                 </div>
               ))}

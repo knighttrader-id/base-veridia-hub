@@ -1,12 +1,11 @@
-import { ENV_CONFIG } from './environment';
-
+// Contract addresses configuration
 export const CONTRACTS = {
-  Artwork: ENV_CONFIG.CONTRACTS.Artwork,
-  License: ENV_CONFIG.CONTRACTS.License,
-  Marketplace: ENV_CONFIG.CONTRACTS.Marketplace,
-  MultiSigWallet: ENV_CONFIG.CONTRACTS.MultiSigWallet,
-  TimelockController: ENV_CONFIG.CONTRACTS.TimelockController,
-  UpgradeProxy: ENV_CONFIG.CONTRACTS.UpgradeProxy,
+  Artwork: import.meta.env.VITE_ARTWORK_CONTRACT || '0x0000000000000000000000000000000000000000',
+  License: import.meta.env.VITE_LICENSE_CONTRACT || '0x0000000000000000000000000000000000000000',
+  Marketplace: import.meta.env.VITE_MARKETPLACE_CONTRACT || '0x0000000000000000000000000000000000000000',
+  MultiSigWallet: import.meta.env.VITE_MULTISIG_CONTRACT || '0x0000000000000000000000000000000000000000',
+  TimelockController: import.meta.env.VITE_TIMELOCK_CONTRACT || '0x0000000000000000000000000000000000000000',
+  UpgradeProxy: import.meta.env.VITE_UPGRADE_PROXY_CONTRACT || '0x0000000000000000000000000000000000000000',
 };
 
 // Contract validation

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter, Eye, ShoppingCart, User, Star, Loader } from 'lucide-react';
 import { getMarketplaceArtworks, MarketplaceArtwork } from '../services/artworkService';
+import { ArtworkImage } from '../components/ImageWithFallback';
 
 const categories = ['Semua', 'Desain', 'Musik', 'Film', 'Tulisan', 'Fotografi'];
 
@@ -112,10 +113,11 @@ export default function Marketplace() {
           {filteredArtworks.map((artwork) => (
             <div key={artwork.tokenId} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow group">
               <div className="relative overflow-hidden">
-                <img
-                  src={artwork.tokenURI || 'https://images.pexels.com/photos/1742370/pexels-photo-1742370.jpeg?w=300&h=200&fit=crop'}
+                <ArtworkImage
+                  src={artwork.tokenURI || ''}
                   alt={artwork.title}
                   className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                  fallbackText={`Artwork ${artwork.title}`}
                 />
                 <div className="absolute top-3 left-3">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${getLicenseColor('Komersial')}`}>

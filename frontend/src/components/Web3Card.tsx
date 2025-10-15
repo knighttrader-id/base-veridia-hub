@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ExternalLink, Copy, CheckCircle, Star, TrendingUp, Zap } from 'lucide-react';
+import { ArtworkImage } from './ImageWithFallback';
 
 interface Web3CardProps {
   title: string;
@@ -46,7 +47,7 @@ export function Web3Card({
   return (
     <div
       className={`
-        group relative bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl overflow-hidden
+        group relative bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl overflow-visible
         hover:bg-white/20 hover:border-white/30 hover:scale-105 transition-all duration-300
         ${isFeatured ? 'ring-2 ring-blue-500/50' : ''}
         ${className}
@@ -58,153 +59,169 @@ export function Web3Card({
       {/* Glow effect */}
       <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
-      {/* Featured badge */}
-      {isFeatured && (
-        <div className="absolute top-4 left-4 z-10">
-          <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+      {/* Badge container - positioned outside content area */}
+      <div className="absolute -top-2 -right-2 z-20 flex flex-col gap-1">
+        {/* Featured badge - top */}
+        {isFeatured && (
+          <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-lg">
             <Star className="w-3 h-3" />
             Featured
           </div>
-        </div>
-      )}
-
-      {/* New badge */}
-      {isNew && (
-        <div className="absolute top-4 right-4 z-10">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
+        )}
+        
+        {/* New badge - bottom */}
+        {isNew && (
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-2 py-1 rounded-full text-xs font-semibold shadow-lg">
             New
           </div>
-        </div>
-      )}
-
-      {/* Image container */}
-      <div className="relative aspect-square overflow-hidden">
-        <img
-          src={image || 'https://images.pexels.com/photos/1742370/pexels-photo-1742370.jpeg?w=400&h=400&fit=crop'}
-          alt={title}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-        />
-        
-        {/* Overlay on hover */}
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-          <div className="flex gap-2">
-            <button className="p-2 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-colors">
-              <ExternalLink className="w-4 h-4 text-white" />
-            </button>
-            <button 
-              className="p-2 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsLiked(!isLiked);
-              }}
-            >
-              <Star className={`w-4 h-4 ${isLiked ? 'text-yellow-400 fill-yellow-400' : 'text-white'}`} />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Content */}
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-3">
-          <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors">
-            {title}
-          </h3>
-          {price && (
-            <div className="text-right">
-              <div className="text-xl font-bold text-white">
-                {price === '0' ? 'Free' : `${price} ETH`}
-              </div>
-              {price !== '0' && (
-                <div className="text-sm text-gray-400">
-                  ≈ ${(parseFloat(price) * 2500).toLocaleString()}
-                </div>
-              )}
+      {/* Horizontal Layout */}
+      <div className="flex">
+        {/* Image container - enlarged for better display */}
+        <div className="relative w-48 h-48 flex-shrink-0 overflow-hidden">
+          <ArtworkImage
+            src={image || ''}
+            alt={title}
+            className="w-full h-full group-hover:scale-110 transition-transform duration-500"
+            fallbackText={title}
+          />
+          
+          {/* Overlay on hover */}
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+            <div className="flex gap-1">
+              <button className="p-1.5 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-colors">
+                <ExternalLink className="w-3 h-3 text-white" />
+              </button>
+              <button 
+                className="p-1.5 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsLiked(!isLiked);
+                }}
+              >
+                <Star className={`w-3 h-3 ${isLiked ? 'text-yellow-400 fill-yellow-400' : 'text-white'}`} />
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
-        <p className="text-gray-300 text-sm mb-4 line-clamp-2">
-          {description}
-        </p>
+        {/* Content - horizontal layout optimized for 3 columns */}
+        <div className="flex-1 p-4 flex flex-col justify-between min-h-0">
+          {/* Top section - title and price */}
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors line-clamp-2 flex-1 mr-3 min-h-0">
+              {title}
+            </h3>
+                {price && (
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <div className="text-lg font-bold text-white">
+                      {price === '0' ? 'Free' : `${price} USDT`}
+                    </div>
+                    {price !== '0' && (
+                      <div className="text-sm text-gray-400">
+                        ≈ ${parseFloat(price).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                )}
+          </div>
 
-        {/* Creator info */}
-        {creator && (
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs font-bold">
-                {creator.slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm text-gray-300 truncate">
-                {creator.slice(0, 6)}...{creator.slice(-4)}
+          {/* Description */}
+          <p className="text-gray-300 text-sm mb-4 line-clamp-3 flex-shrink-0">
+            {description}
+          </p>
+
+          {/* Middle section - creator and stats */}
+          <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            {/* Creator info */}
+            {creator && (
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-sm font-bold">
+                    {creator.slice(0, 1).toUpperCase()}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-300 truncate">
+                  {creator.slice(0, 8)}...{creator.slice(-4)}
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopy();
+                  }}
+                  className="p-1 hover:bg-white/20 rounded transition-colors flex-shrink-0"
+                >
+                  {copied ? (
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-gray-400" />
+                  )}
+                </button>
               </div>
-            </div>
-            <button
+            )}
+
+            {/* Stats */}
+            {stats && (
+              <div className="flex items-center gap-3 text-sm text-gray-400 flex-shrink-0">
+                {stats.views && (
+                  <div className="flex items-center gap-1">
+                    <ExternalLink className="w-4 h-4" />
+                    {stats.views > 1000 ? `${(stats.views / 1000).toFixed(1)}k` : stats.views}
+                  </div>
+                )}
+                {stats.likes && (
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4" />
+                    {stats.likes > 1000 ? `${(stats.likes / 1000).toFixed(1)}k` : stats.likes}
+                  </div>
+                )}
+                {stats.sales && (
+                  <div className="flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4" />
+                    {stats.sales}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom section - tags and action */}
+          <div className="flex items-center justify-between flex-shrink-0">
+            {/* Tags */}
+            {tags.length > 0 && (
+              <div className="flex gap-2 flex-1 min-w-0">
+                {tags.slice(0, 3).map((tag, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-sm text-gray-300 whitespace-nowrap"
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {tags.length > 3 && (
+                  <span className="px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-sm text-gray-300">
+                    +{tags.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Action button */}
+            <button 
               onClick={(e) => {
                 e.stopPropagation();
-                handleCopy();
+                console.log('Web3Card View Details button clicked for:', title);
+                onClick?.();
               }}
-              className="p-1 hover:bg-white/20 rounded transition-colors"
+              className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center gap-2 text-sm flex-shrink-0"
             >
-              {copied ? (
-                <CheckCircle className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4 text-gray-400" />
-              )}
+              <Zap className="w-4 h-4" />
+              View Details
             </button>
           </div>
-        )}
-
-        {/* Stats */}
-        {stats && (
-          <div className="flex items-center gap-4 mb-4 text-sm text-gray-400">
-            {stats.views && (
-              <div className="flex items-center gap-1">
-                <ExternalLink className="w-4 h-4" />
-                {stats.views.toLocaleString()}
-              </div>
-            )}
-            {stats.likes && (
-              <div className="flex items-center gap-1">
-                <Star className="w-4 h-4" />
-                {stats.likes.toLocaleString()}
-              </div>
-            )}
-            {stats.sales && (
-              <div className="flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" />
-                {stats.sales.toLocaleString()}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {tags.slice(0, 3).map((tag, index) => (
-              <span
-                key={index}
-                className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded-full text-xs text-gray-300 hover:bg-white/20 transition-colors"
-              >
-                {tag}
-              </span>
-            ))}
-            {tags.length > 3 && (
-              <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded-full text-xs text-gray-300">
-                +{tags.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Action button */}
-        <button className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2">
-          <Zap className="w-4 h-4" />
-          View Details
-        </button>
+        </div>
       </div>
 
       {/* Animated border */}
@@ -213,10 +230,10 @@ export function Web3Card({
   );
 }
 
-// Grid layout component
+// Grid layout component - 2 columns maximum for better readability with larger images
 export function Web3Grid({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 ${className}`}>
+    <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 ${className}`}>
       {children}
     </div>
   );
@@ -262,14 +279,14 @@ export function Web3Hero({
         </button>
 
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16">
             {stats.map((stat, index) => (
               <div key={index} className="text-center">
-                <div className="text-3xl font-bold text-white mb-2 flex items-center justify-center gap-2">
+                <div className="text-2xl md:text-3xl font-bold text-white mb-2 flex items-center justify-center gap-2 whitespace-nowrap">
                   {stat.icon}
-                  {stat.value}
+                  <span className="truncate">{stat.value}</span>
                 </div>
-                <div className="text-gray-400">{stat.label}</div>
+                <div className="text-gray-400 text-sm">{stat.label}</div>
               </div>
             ))}
           </div>

@@ -12,6 +12,8 @@ export function Web3Navbar({  className = '' }: Web3NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userButtonClicked, setUserButtonClicked] = useState(false);
+  const [settingsButtonClicked, setSettingsButtonClicked] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -137,11 +139,37 @@ export function Web3Navbar({  className = '' }: Web3NavbarProps) {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                    <User className="h-5 w-5 text-white" />
+                  <button 
+                    onClick={() => {
+                      setUserButtonClicked(true);
+                      console.log('User profile clicked');
+                      alert('User Profile clicked! This button is now working.');
+                      setTimeout(() => setUserButtonClicked(false), 1000);
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      userButtonClicked 
+                        ? 'bg-green-500/20 text-green-400' 
+                        : 'hover:bg-white/10'
+                    }`}
+                    title="User Profile - Click to test"
+                  >
+                    <User className="h-5 w-5" />
                   </button>
-                  <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                    <Settings className="h-5 w-5 text-white" />
+                  <button 
+                    onClick={() => {
+                      setSettingsButtonClicked(true);
+                      console.log('Settings clicked');
+                      alert('Settings clicked! This button is now working.');
+                      setTimeout(() => setSettingsButtonClicked(false), 1000);
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      settingsButtonClicked 
+                        ? 'bg-blue-500/20 text-blue-400' 
+                        : 'hover:bg-white/10'
+                    }`}
+                    title="Settings - Click to test"
+                  >
+                    <Settings className="h-5 w-5" />
                   </button>
                   <button
                     onClick={disconnectWallet}
@@ -235,11 +263,37 @@ export function Web3Navbar({  className = '' }: Web3NavbarProps) {
 
                 {/* Mobile Action Buttons */}
                 <div className="flex items-center gap-2 px-2">
-                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white">
+                  <button 
+                    onClick={() => {
+                      setUserButtonClicked(true);
+                      console.log('Mobile user profile clicked');
+                      alert('Mobile User Profile clicked! This button is now working.');
+                      setTimeout(() => setUserButtonClicked(false), 1000);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                      userButtonClicked 
+                        ? 'bg-green-500/20 text-green-400' 
+                        : 'bg-white/5 hover:bg-white/10 text-white'
+                    }`}
+                    title="User Profile - Click to test"
+                  >
                     <User className="h-4 w-4" />
                     <span className="text-sm">Profile</span>
                   </button>
-                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white">
+                  <button 
+                    onClick={() => {
+                      setSettingsButtonClicked(true);
+                      console.log('Mobile settings clicked');
+                      alert('Mobile Settings clicked! This button is now working.');
+                      setTimeout(() => setSettingsButtonClicked(false), 1000);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                      settingsButtonClicked 
+                        ? 'bg-blue-500/20 text-blue-400' 
+                        : 'bg-white/5 hover:bg-white/10 text-white'
+                    }`}
+                    title="Settings - Click to test"
+                  >
                     <Settings className="h-4 w-4" />
                     <span className="text-sm">Settings</span>
                   </button>

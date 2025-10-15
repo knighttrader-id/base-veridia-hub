@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter, Eye, ShoppingCart, User, Star, Loader, Zap, TrendingUp, Users, Clock, Sparkles, Heart, Share2, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { getMarketplaceArtworks, MarketplaceArtwork } from '../services/artworkService';
+import DemoModeBadge from '../components/DemoModeBadge';
 import { AnimatedBackground, FloatingElements } from '../components/AnimatedBackground';
 import { Web3Card, Web3Grid, Web3Hero } from '../components/Web3Card';
+import { CompactNFTCard, CompactNFTGrid, UltraCompactNFTGrid } from '../components/CompactNFTCard';
+import { HorizontalNFTCard, HorizontalNFTGrid, UltraHorizontalNFTGrid } from '../components/HorizontalNFTCard';
 import { Web3Navbar, FloatingActionButton } from '../components/Web3Navbar';
 import TokenSelector from '../components/TokenSelector';
 import ApprovalButton from '../components/ApprovalButton';
@@ -13,17 +16,20 @@ import { useWallet } from '../contexts/WalletContext';
 import { TokenService } from '../services/tokenService';
 import { MarketplaceService } from '../services/onchainService';
 import { getNativeToken } from '../config/tokens';
+import { ArtworkImage } from '../components/ImageWithFallback';
+import { ArtworkDetailModal } from '../components/ArtworkDetailModal';
 
-const categories = ['Semua', 'Desain', 'Musik', 'Film', 'Tulisan', 'Fotografi', 'NFT', '3D Art'];
+const categories = ['All', 'Design', 'Music', 'Film', 'Writing', 'Photography', 'NFT', '3D Art'];
 
 export default function Web3Marketplace() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [isFiltering, setIsFiltering] = useState(false);
   const [artworks, setArtworks] = useState<MarketplaceArtwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'newest' | 'price' | 'popular'>('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'compact' | 'ultra-compact'>('compact');
   
   // Multi-token purchase state
   const [selectedToken, setSelectedToken] = useState(getNativeToken().address);
@@ -33,6 +39,7 @@ export default function Web3Marketplace() {
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [userBalances, setUserBalances] = useState<{ [key: string]: string }>({});
+  const [artworkBadges, setArtworkBadges] = useState<{ [key: string]: { isFeatured: boolean; isNew: boolean } }>({});
   
   const { account } = useWallet();
 
@@ -51,6 +58,16 @@ export default function Web3Marketplace() {
       setLoading(true);
       const data = await getMarketplaceArtworks();
       setArtworks(data);
+      
+      // Generate consistent badges for each artwork
+      const badges: { [key: string]: { isFeatured: boolean; isNew: boolean } } = {};
+      data.forEach(artwork => {
+        badges[artwork.tokenId] = {
+          isFeatured: Math.random() > 0.8,
+          isNew: Math.random() > 0.9
+        };
+      });
+      setArtworkBadges(badges);
     } catch (err) {
       console.error('Error loading artworks:', err);
       setError('Failed to load marketplace artworks');
@@ -91,14 +108,19 @@ export default function Web3Marketplace() {
   };
 
   const handlePurchaseClick = (artwork: MarketplaceArtwork) => {
-    if (!account) {
-      alert('Please connect your wallet to purchase artworks');
-      return;
-    }
+    console.log('Purchase clicked for artwork:', artwork.title);
+    console.log('Account status:', account);
+    
+    // For demo purposes, allow viewing without wallet connection
     setSelectedArtwork(artwork);
     setShowPurchaseModal(true);
     setPurchaseError(null);
     setPurchaseSuccess(false);
+    
+    // Show wallet connection alert only when trying to purchase
+    if (!account) {
+      console.log('No wallet connected - showing demo mode');
+    }
   };
 
   const handlePurchase = async () => {
@@ -139,10 +161,37 @@ export default function Web3Marketplace() {
     setPurchaseSuccess(false);
   };
 
+  const handleCategoryChange = (category: string) => {
+    setIsFiltering(true);
+    setSelectedCategory(category);
+    console.log(`Category changed to: ${category}`);
+    
+    // Simulate filtering delay for better UX
+    setTimeout(() => {
+      setIsFiltering(false);
+    }, 300);
+  };
+
   const filteredArtworks = artworks.filter(artwork => {
     const matchesSearch = artwork.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          artwork.creator.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    
+    // Category filtering
+    const matchesCategory = selectedCategory === 'All' || 
+      (selectedCategory === 'Design' && artwork.category === 'digital-art') ||
+      (selectedCategory === 'Photography' && artwork.category === 'photography') ||
+      (selectedCategory === '3D Art' && artwork.category === '3d-art') ||
+      (selectedCategory === 'Music' && artwork.category === 'music') ||
+      (selectedCategory === 'NFT' && (artwork.category === 'digital-art' || artwork.category === 'illustration')) ||
+      (selectedCategory === 'Film' && artwork.category === '3d-art') ||
+      (selectedCategory === 'Writing' && artwork.category === 'illustration');
+    
+    // Debug logging
+    if (selectedCategory !== 'All') {
+      console.log(`Artwork: ${artwork.title}, Category: ${artwork.category}, Selected: ${selectedCategory}, Matches: ${matchesCategory}`);
+    }
+    
+    return matchesSearch && matchesCategory;
   });
 
   const sortedArtworks = [...filteredArtworks].sort((a, b) => {
@@ -157,12 +206,12 @@ export default function Web3Marketplace() {
   });
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'IDR',
+      currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount * 15000);
+    }).format(amount);
   };
 
   const getLicenseColor = (licenseType: string) => {
@@ -186,6 +235,9 @@ export default function Web3Marketplace() {
       
       {/* Web3 Navbar */}
       <Web3Navbar />
+      
+      {/* Demo Mode Badge */}
+      <DemoModeBadge />
 
       <div className="relative z-10 pt-20">
         {/* Hero Section */}
@@ -195,12 +247,12 @@ export default function Web3Marketplace() {
           description="Discover, trade, and monetize digital artworks on the blockchain. Experience the future of creative ownership with our decentralized platform."
           ctaText="Start Creating"
           onCtaClick={() => {}}
-          stats={[
-            { label: 'Total Artworks', value: '1,234', icon: <Zap className="w-6 h-6" /> },
-            { label: 'Active Creators', value: '567', icon: <Users className="w-6 h-6" /> },
-            { label: 'Total Sales', value: '89.2 ETH', icon: <TrendingUp className="w-6 h-6" /> },
-            { label: 'Avg. Price', value: '0.15 ETH', icon: <Clock className="w-6 h-6" /> }
-          ]}
+              stats={[
+                { label: 'Total Artworks', value: '2,500+', icon: <Zap className="w-6 h-6" /> },
+                { label: 'Active Creators', value: '1,200+', icon: <Users className="w-6 h-6" /> },
+                { label: 'Total Sales', value: '850,000 USDT', icon: <TrendingUp className="w-6 h-6" /> },
+                { label: 'Avg. Price', value: '340 USDT', icon: <Clock className="w-6 h-6" /> }
+              ]}
         />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -235,15 +287,24 @@ export default function Web3Marketplace() {
                   <div className="flex bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl overflow-hidden">
                     <button
                       onClick={() => setViewMode('grid')}
-                      className={`px-4 py-4 transition-colors ${viewMode === 'grid' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-3 py-4 transition-colors ${viewMode === 'grid' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Large Grid"
                     >
-                      <Filter className="h-5 w-5" />
+                      <Filter className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => setViewMode('list')}
-                      className={`px-4 py-4 transition-colors ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setViewMode('compact')}
+                      className={`px-3 py-4 transition-colors ${viewMode === 'compact' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Compact Grid"
                     >
-                      <Eye className="h-5 w-5" />
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('ultra-compact')}
+                      className={`px-3 py-4 transition-colors ${viewMode === 'ultra-compact' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Ultra Compact"
+                    >
+                      <Zap className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -254,14 +315,20 @@ export default function Web3Marketplace() {
                 {categories.map((category) => (
                   <button
                     key={category}
-                    onClick={() => setSelectedCategory(category)}
+                    onClick={() => handleCategoryChange(category)}
+                    disabled={isFiltering}
                     className={`px-6 py-3 rounded-full text-sm font-medium transition-all duration-200 ${
                       selectedCategory === category
                         ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg transform scale-105'
                         : 'bg-white/10 backdrop-blur-sm text-gray-300 hover:bg-white/20 hover:text-white hover:scale-105'
-                    }`}
+                    } ${isFiltering ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {category}
+                    {isFiltering && selectedCategory === category && (
+                      <span className="ml-2">
+                        <Loader className="w-4 h-4 animate-spin inline" />
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -274,6 +341,13 @@ export default function Web3Marketplace() {
               <div className="text-center">
                 <Loader className="h-12 w-12 text-blue-500 animate-spin mx-auto mb-4" />
                 <p className="text-white text-lg">Loading artworks...</p>
+              </div>
+            </div>
+          ) : isFiltering ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <Loader className="h-12 w-12 text-blue-500 animate-spin mx-auto mb-4" />
+                <p className="text-white text-lg">Filtering artworks...</p>
               </div>
             </div>
           ) : error ? (
@@ -291,8 +365,15 @@ export default function Web3Marketplace() {
                     {filteredArtworks.length} Artworks Found
                   </h2>
                   <p className="text-gray-400">
-                    {selectedCategory !== 'Semua' && `in ${selectedCategory}`}
+                    {selectedCategory !== 'All' ? `in ${selectedCategory} category` : 'across all categories'}
                   </p>
+                  {selectedCategory !== 'All' && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        Filtered by: {selectedCategory}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 text-gray-400">
@@ -302,33 +383,74 @@ export default function Web3Marketplace() {
                 </div>
               </div>
 
-              {/* Artworks Grid */}
-              <Web3Grid>
-                {sortedArtworks.map((artwork) => (
-                  <Web3Card
-                    key={artwork.tokenId}
-                    title={artwork.title}
-                    description={artwork.description}
-                    price={artwork.price}
-                    image={artwork.tokenURI}
-                    creator={artwork.creator}
-                    stats={{
-                      views: Math.floor(Math.random() * 1000) + 100,
-                      likes: Math.floor(Math.random() * 100) + 10,
-                      sales: Math.floor(Math.random() * 50) + 5
-                    }}
-                    tags={['Digital Art', 'NFT', 'Blockchain']}
-                    isFeatured={Math.random() > 0.8}
-                    isNew={Math.random() > 0.9}
-                    onClick={() => handlePurchaseClick(artwork)}
-                    actionButton={{
-                      text: account ? 'Buy Now' : 'Connect Wallet',
-                      icon: <ShoppingCart className="w-4 h-4" />,
-                      onClick: () => handlePurchaseClick(artwork)
-                    }}
-                  />
-                ))}
-              </Web3Grid>
+              {/* Artworks Grid - Dynamic Layout */}
+              {viewMode === 'grid' ? (
+                <Web3Grid>
+                  {sortedArtworks.map((artwork) => (
+                    <Web3Card
+                      key={artwork.tokenId}
+                      title={artwork.title}
+                      description={artwork.description}
+                      price={artwork.price}
+                      image={artwork.tokenURI}
+                      creator={artwork.creator}
+                      stats={{
+                        views: Math.floor(Math.random() * 1000) + 100,
+                        likes: Math.floor(Math.random() * 100) + 10,
+                        sales: Math.floor(Math.random() * 50) + 5
+                      }}
+                      tags={['Digital Art', 'NFT', 'Blockchain']}
+                      isFeatured={artworkBadges[artwork.tokenId]?.isFeatured || false}
+                      isNew={artworkBadges[artwork.tokenId]?.isNew || false}
+                      onClick={() => handlePurchaseClick(artwork)}
+                    />
+                  ))}
+                </Web3Grid>
+              ) : viewMode === 'compact' ? (
+                <HorizontalNFTGrid>
+                  {sortedArtworks.map((artwork) => (
+                    <HorizontalNFTCard
+                      key={artwork.tokenId}
+                      title={artwork.title}
+                      description={artwork.description}
+                      price={artwork.price}
+                      image={artwork.tokenURI}
+                      creator={artwork.creator}
+                      stats={{
+                        views: Math.floor(Math.random() * 1000) + 100,
+                        likes: Math.floor(Math.random() * 100) + 10,
+                        sales: Math.floor(Math.random() * 50) + 5
+                      }}
+                      tags={['Digital Art', 'NFT', 'Blockchain']}
+                      isFeatured={artworkBadges[artwork.tokenId]?.isFeatured || false}
+                      isNew={artworkBadges[artwork.tokenId]?.isNew || false}
+                      onClick={() => handlePurchaseClick(artwork)}
+                    />
+                  ))}
+                </HorizontalNFTGrid>
+              ) : (
+                <UltraHorizontalNFTGrid>
+                  {sortedArtworks.map((artwork) => (
+                    <HorizontalNFTCard
+                      key={artwork.tokenId}
+                      title={artwork.title}
+                      description={artwork.description}
+                      price={artwork.price}
+                      image={artwork.tokenURI}
+                      creator={artwork.creator}
+                      stats={{
+                        views: Math.floor(Math.random() * 1000) + 100,
+                        likes: Math.floor(Math.random() * 100) + 10,
+                        sales: Math.floor(Math.random() * 50) + 5
+                      }}
+                      tags={['Digital Art', 'NFT', 'Blockchain']}
+                      isFeatured={artworkBadges[artwork.tokenId]?.isFeatured || false}
+                      isNew={artworkBadges[artwork.tokenId]?.isNew || false}
+                      onClick={() => handlePurchaseClick(artwork)}
+                    />
+                  ))}
+                </UltraHorizontalNFTGrid>
+              )}
 
               {/* Load More */}
               <div className="text-center py-8">
@@ -369,10 +491,11 @@ export default function Web3Marketplace() {
                 {/* Artwork Preview */}
                 <div className="space-y-4">
                   <div className="aspect-square bg-gray-700 rounded-xl overflow-hidden">
-                    <img
-                      src={selectedArtwork.tokenURI}
+                    <ArtworkImage
+                      src={selectedArtwork.tokenURI || ''}
                       alt={selectedArtwork.title}
                       className="w-full h-full object-cover"
+                      fallbackText={`Artwork ${selectedArtwork.title}`}
                     />
                   </div>
                   <div>
@@ -488,6 +611,43 @@ export default function Web3Marketplace() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Artwork Detail Modal - Alternative View */}
+      {showPurchaseModal && selectedArtwork && (
+        <ArtworkDetailModal
+          artwork={{
+            tokenId: selectedArtwork.tokenId,
+            title: selectedArtwork.title,
+            description: selectedArtwork.description,
+            tokenURI: selectedArtwork.tokenURI,
+            creator: selectedArtwork.creator,
+            creatorName: selectedArtwork.creatorName || 'Unknown Artist',
+            price: selectedArtwork.price,
+            category: selectedArtwork.category || 'digital-art',
+            tags: selectedArtwork.tags || ['Digital Art', 'NFT', 'Blockchain'],
+            views: Math.floor(Math.random() * 1000) + 100,
+            likes: Math.floor(Math.random() * 100) + 10,
+            sales: Math.floor(Math.random() * 50) + 5,
+            createdAt: new Date().toISOString(),
+            isVerified: Math.random() > 0.3,
+            isFeatured: artworkBadges[selectedArtwork.tokenId]?.isFeatured || false,
+            isNew: artworkBadges[selectedArtwork.tokenId]?.isNew || false,
+            licenseType: selectedArtwork.licenseType || 'commercial',
+            fileSize: '2.5 MB',
+            dimensions: '1920x1080',
+            format: 'PNG',
+            royalty: selectedArtwork.royalty || 10,
+            licenseExpiration: selectedArtwork.licenseExpiration,
+            usageRights: selectedArtwork.usageRights || ['Print and digital reproduction', 'Social media sharing'],
+            restrictions: selectedArtwork.restrictions || ['Attribution required'],
+            licenseTermsURI: selectedArtwork.licenseTermsURI
+          }}
+          isOpen={showPurchaseModal}
+          onClose={closePurchaseModal}
+          onPurchase={account ? handlePurchase : undefined}
+          account={account}
+        />
       )}
     </div>
   );

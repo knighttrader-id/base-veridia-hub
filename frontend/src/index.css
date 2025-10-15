@@ -12,3 +12,62 @@
     linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
   background-size: 20px 20px;
 }
+
+/* Line clamp utilities for compact cards */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Text wrapping utilities for image fallbacks */
+.break-words {
+  word-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.text-wrap-balance {
+  text-wrap: balance;
+}
+
+/* Compact text utilities for small containers */
+.text-compact {
+  font-size: 0.75rem; /* 12px */
+  line-height: 1.2;
+  padding: 0.25rem;
+}
+
+.text-micro {
+  font-size: 0.625rem; /* 10px */
+  line-height: 1.1;
+  padding: 0.125rem;
+}
+
+/* Strict text containment for image fallbacks */
+.text-strict {
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  word-break: break-all !important;
+}
+
+/* Hide scrollbar for horizontal progress steps */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
