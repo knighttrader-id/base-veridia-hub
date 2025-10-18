@@ -1,4 +1,17 @@
 {
+  "name": "veridia-hub-smartcontracts",
+  "version": "1.0.0",
+  "description": "VeridiaHub Smart Contracts for Base Sepolia",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:base-sepolia": "hardhat run scripts/deploy-base-sepolia.ts --network baseSepolia",
+    "deploy:simple": "hardhat run scripts/deploy-simple.ts --network baseSepolia",
+    "verify": "hardhat run scripts/verify-contracts.ts --network baseSepolia",
+    "helper": "hardhat run scripts/deploy-helper.ts --network baseSepolia",
+    "clean": "hardhat clean",
+    "coverage": "hardhat coverage"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@openzeppelin/contracts": "^5.4.0",
